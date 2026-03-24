@@ -1,0 +1,72 @@
+{
+  "name": "electronext",
+  "version": "1.0.0",
+  "description": "Modern Electron boilerplate powered by Next.js, Tailwind CSS v4, and Redux Toolkit",
+  "type": "module",
+  "main": "dist/electron/main.js",
+  "author": "",
+  "license": "MIT",
+  "private": true,
+  "engines": {
+    "node": ">=20.9.0"
+  },
+  "scripts": {
+    "dev": "node scripts/check-port.mjs && npm run build:electron && concurrently --kill-others \"npm run dev:renderer\" \"npm run dev:electron\"",
+    "dev:renderer": "next dev renderer --port 3000",
+    "dev:electron": "wait-on http://localhost:3000 && concurrently --kill-others \"tsc -p electron/tsconfig.json --watch --preserveWatchOutput\" \"cross-env NODE_ENV=development electron .\"",
+    "build": "npm run build:renderer && npm run build:electron",
+    "build:renderer": "next build renderer",
+    "build:electron": "tsc -p electron/tsconfig.json",
+    "clean:sourcemaps": "node scripts/clean-sourcemaps.mjs",
+    "pack": "npm run build && electron-builder --dir",
+    "dist": "npm run build && npm run clean:sourcemaps && electron-builder",
+    "dist:mac": "npm run build && npm run clean:sourcemaps && electron-builder --mac",
+    "dist:win": "npm run build && npm run clean:sourcemaps && electron-builder --win",
+    "dist:linux": "npm run build && npm run clean:sourcemaps && electron-builder --linux",
+    "test:e2e": "playwright test",
+    "storybook": "storybook dev -p 6006",
+    "build:storybook": "storybook build",
+    "lint": "eslint .",
+    "prepare": "husky",
+    "postinstall": "electron-builder install-app-deps"
+  },
+  "lint-staged": {
+    "*.{ts,tsx,mjs}": "eslint --fix --no-warn-ignored"
+  },
+  "dependencies": {
+    "@reduxjs/toolkit": "^2.11.2",
+    "electron-log": "^5.4.3",
+    "electron-store": "^11.0.2",
+    "electron-updater": "^6.8.3",
+    "next": "^16.2.1",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
+    "react-redux": "^9.2.0"
+  },
+  "devDependencies": {
+    "@electron/notarize": "^3.1.1",
+    "@playwright/test": "^1.58.2",
+    "@storybook/addon-essentials": "^8.6.14",
+    "@storybook/nextjs": "^10.3.3",
+    "@storybook/react": "^10.3.3",
+    "@tailwindcss/postcss": "^4.2.2",
+    "@types/node": "^25.5.0",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "concurrently": "^9.2.1",
+    "cross-env": "^10.1.0",
+    "detect-port": "^2.1.0",
+    "electron": "^41.0.3",
+    "electron-builder": "^26.8.1",
+    "electron-devtools-installer": "^4.0.0",
+    "eslint": "^9.39.4",
+    "eslint-config-next": "^16.2.1",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.4.0",
+    "postcss": "^8.5.8",
+    "storybook": "^10.3.3",
+    "tailwindcss": "^4.2.2",
+    "typescript": "^6.0.2",
+    "wait-on": "^9.0.4"
+  }
+}
