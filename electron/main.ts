@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain } from 'electron';
+import { app, BrowserWindow, globalShortcut, ipcMain } from 'electron';
 import path from 'node:path';
 import { createWindow } from './helpers/create-window.js';
 import { resolveUrl, isProd, registerAppProtocol } from './helpers/resolve-path.js';
@@ -11,13 +11,20 @@ import { createTray, destroyTray } from './services/tray.js';
 import { createMenu } from './services/menu.js';
 import { applySecurityRestrictions } from './services/security.js';
 import { installDevToolsExtensions } from './services/devtools.js';
-import { registerProtocol, setupDeepLinkHandlers } from './services/deep-link.js';
+import { registerProtocol, setupDeepLinkHandlers, handleDeepLink, DEEP_LINK_PROTOCOL } from './services/deep-link.js';
+import { setupPowerMonitor } from './services/power-monitor.js';
+import { workerManager } from './services/worker-manager.js';
+import { initDatabase, closeDatabase } from './services/database.js';
+import { initSpellChecker } from './services/spell-checker.js';
 
 const isDebug = !isProd || process.env.DEBUG_PROD === 'true';
 const isMac = process.platform === 'darwin';
 
 let mainWindow: BrowserWindow | null = null;
 let splashWindow: BrowserWindow | null = null;
+
+// Store file path opened via OS file association (before app is ready)
+let pendingFilePath: string | null = null;
 
 // ── Single instance lock ──────────────────────────────────────────────
 const gotTheLock = app.requestSingleInstanceLock();
@@ -26,38 +33,51 @@ if (!gotTheLock) {
   process.exit(0);
 }
 
-// Set userData path for dev BEFORE app ready to avoid conflicts
 if (!isProd) {
   app.setPath('userData', `${app.getPath('userData')} (development)`);
 }
 
-// Register custom protocol for deep linking (must be before app.whenReady)
 registerProtocol();
 
-app.on('second-instance', () => {
+app.on('second-instance', (_event, argv) => {
   if (mainWindow) {
     if (mainWindow.isMinimized()) mainWindow.restore();
     mainWindow.focus();
+  }
+
+  // Check for deep link URL first (electronext://...)
+  const deepLinkUrl = argv.find((arg) => arg.startsWith(`${DEEP_LINK_PROTOCOL}://`));
+  if (deepLinkUrl) {
+    handleDeepLink(deepLinkUrl, mainWindow);
+    return;
+  }
+
+  // Otherwise check for file path (Windows/Linux file association)
+  const filePath = argv.find((arg) => !arg.startsWith('-') && arg !== process.execPath && arg !== '.');
+  if (filePath && mainWindow) {
+    mainWindow.webContents.send(IPC_CHANNELS.FILE_OPENED, filePath);
+  }
+});
+
+// macOS: file opened via Finder / file association
+app.on('open-file', (event, filePath) => {
+  event.preventDefault();
+  if (mainWindow) {
+    mainWindow.webContents.send(IPC_CHANNELS.FILE_OPENED, filePath);
+  } else {
+    pendingFilePath = filePath;
   }
 });
 
 // ── Splash screen ─────────────────────────────────────────────────────
 function createSplash(): BrowserWindow {
   const splash = new BrowserWindow({
-    width: 300,
-    height: 300,
-    frame: false,
-    transparent: true,
-    resizable: false,
-    alwaysOnTop: true,
-    skipTaskbar: true,
-    webPreferences: {
-      nodeIntegration: false,
-      contextIsolation: true,
-    },
+    width: 300, height: 300,
+    frame: false, transparent: true, resizable: false,
+    alwaysOnTop: true, skipTaskbar: true,
+    webPreferences: { nodeIntegration: false, contextIsolation: true },
   });
-
-  splash.loadFile(path.join(app.getAppPath(), 'electron/splash/index.html'));
+  splash.loadFile(path.join(app.getAppPath(), 'resources/splash.html'));
   return splash;
 }
 
@@ -68,8 +88,6 @@ async function createMainWindow(): Promise<void> {
   mainWindow = createWindow('main', {
     minWidth: 800,
     minHeight: 600,
-    // Frameless title bar: macOS uses hidden inset (native traffic lights),
-    // Windows/Linux use completely frameless (custom TitleBar component).
     ...(isMac
       ? { titleBarStyle: 'hiddenInset', trafficLightPosition: { x: 12, y: 12 } }
       : { frame: false }),
@@ -78,7 +96,6 @@ async function createMainWindow(): Promise<void> {
   createMenu();
   createTray(mainWindow);
 
-  // Notify renderer when maximize state changes (for title bar button icon)
   mainWindow.on('maximize', () => {
     mainWindow?.webContents.send(IPC_CHANNELS.MAXIMIZED_CHANGED, true);
   });
@@ -96,6 +113,12 @@ async function createMainWindow(): Promise<void> {
     if (isDebug) {
       mainWindow?.webContents.openDevTools();
     }
+
+    // Send any pending file that was opened before the window was ready (#1)
+    if (pendingFilePath && mainWindow) {
+      mainWindow.webContents.send(IPC_CHANNELS.FILE_OPENED, pendingFilePath);
+      pendingFilePath = null;
+    }
   });
 
   const url = resolveUrl();
@@ -107,6 +130,7 @@ async function createMainWindow(): Promise<void> {
   }
 
   mainWindow.on('closed', () => {
+    appUpdater.clearWindow();
     mainWindow = null;
   });
 }
@@ -114,14 +138,8 @@ async function createMainWindow(): Promise<void> {
 // ── Updater IPC (prod only) ───────────────────────────────────────────
 function registerUpdaterHandlers(): void {
   if (!isProd) return;
-
-  ipcMain.handle(IPC_CHANNELS.CHECK_FOR_UPDATES, () => {
-    appUpdater.checkForUpdates();
-  });
-
-  ipcMain.handle(IPC_CHANNELS.INSTALL_UPDATE, () => {
-    appUpdater.installUpdate();
-  });
+  ipcMain.handle(IPC_CHANNELS.CHECK_FOR_UPDATES, () => appUpdater.checkForUpdates());
+  ipcMain.handle(IPC_CHANNELS.INSTALL_UPDATE, () => appUpdater.installUpdate());
 }
 
 // ── App lifecycle ─────────────────────────────────────────────────────
@@ -132,6 +150,9 @@ app.whenReady().then(async () => {
   registerAppProtocol();
   applySecurityRestrictions();
   setupDeepLinkHandlers(() => mainWindow);
+  setupPowerMonitor();
+  await initDatabase();
+  initSpellChecker();
 
   if (!isProd) {
     await installDevToolsExtensions();
@@ -156,5 +177,8 @@ app.on('window-all-closed', () => {
 });
 
 app.on('before-quit', () => {
+  globalShortcut.unregisterAll();
+  workerManager.terminateAll();
+  closeDatabase();
   destroyTray();
 });

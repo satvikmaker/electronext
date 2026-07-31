@@ -39,10 +39,14 @@ function buildCsp(): string {
     ? `script-src 'self' 'nonce-${nonce}'`
     : "script-src 'self' 'unsafe-inline' 'unsafe-eval'";
 
+  const styleSrc = useNonce
+    ? `style-src 'self' 'nonce-${nonce}'`
+    : "style-src 'self' 'unsafe-inline'";
+
   const directives = [
     "default-src 'self'",
     scriptSrc,
-    "style-src 'self' 'unsafe-inline'",
+    styleSrc,
     "img-src 'self' data: blob:",
     "font-src 'self' data:",
     "connect-src 'self'" + (isProd ? '' : ' ws://localhost:* http://localhost:*'),

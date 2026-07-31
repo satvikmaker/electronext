@@ -27,7 +27,7 @@ export default function TitleBar() {
     const electron = window.electron;
     if (!electron) return;
 
-    electron.ipc.invoke('window:is-maximized').then(setIsMaximized);
+    electron.ipc.invoke('window:is-maximized').then(setIsMaximized).catch(() => {});
     const unsub = electron.ipc.on('window:maximized-changed', setIsMaximized);
     return unsub;
   }, []);

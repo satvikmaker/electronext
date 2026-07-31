@@ -50,7 +50,7 @@ export default function DropZone() {
 
     // Get metadata from main process
     const metadata = await window.electron.ipc.invoke('file:get-metadata', paths);
-    setFiles(metadata as FileInfo[]);
+    setFiles(metadata);
   }, []);
 
   return (
@@ -61,7 +61,10 @@ export default function DropZone() {
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
-        className={`flex min-h-[120px] items-center justify-center rounded-xl border-2 border-dashed transition-colors ${
+        role="region"
+        aria-label="File drop zone"
+        tabIndex={0}
+        className={`flex min-h-[120px] items-center justify-center rounded-xl border-2 border-dashed transition-colors focus:outline-none focus:ring-2 focus:ring-primary ${
           isDragging
             ? 'border-primary bg-primary/10 text-primary'
             : 'border-surface-light text-text-muted'

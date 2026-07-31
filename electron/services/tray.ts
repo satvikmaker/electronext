@@ -3,8 +3,14 @@ import path from 'node:path';
 
 let tray: Tray | null = null;
 
+/** Show and focus the window if it's not destroyed. */
+function showWindow(win: BrowserWindow): void {
+  if (win.isDestroyed()) return;
+  win.show();
+  win.focus();
+}
+
 export function createTray(mainWindow: BrowserWindow): Tray {
-  // Destroy existing tray to prevent duplicates on macOS reactivation
   if (tray) {
     tray.destroy();
     tray = null;
@@ -18,33 +24,24 @@ export function createTray(mainWindow: BrowserWindow): Tray {
   const contextMenu = Menu.buildFromTemplate([
     {
       label: 'Show App',
-      click: () => {
-        mainWindow.show();
-        mainWindow.focus();
-      },
+      click: () => showWindow(mainWindow),
     },
     {
       label: 'Hide App',
       click: () => {
-        mainWindow.hide();
+        if (!mainWindow.isDestroyed()) mainWindow.hide();
       },
     },
     { type: 'separator' },
     {
       label: 'Quit',
-      click: () => {
-        app.quit();
-      },
+      click: () => app.quit(),
     },
   ]);
 
   tray.setToolTip(app.getName());
   tray.setContextMenu(contextMenu);
-
-  tray.on('double-click', () => {
-    mainWindow.show();
-    mainWindow.focus();
-  });
+  tray.on('double-click', () => showWindow(mainWindow));
 
   return tray;
 }

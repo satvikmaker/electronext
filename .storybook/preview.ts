@@ -3,12 +3,14 @@ import '../renderer/app/globals.css';
 
 const preview: Preview = {
   parameters: {
+    // Storybook 9+ takes a keyed `options` record here; the old `values` array
+    // (Storybook 8 and earlier) is ignored, and `default` names an option key.
     backgrounds: {
       default: 'dark',
-      values: [
-        { name: 'dark', value: '#0f172a' },
-        { name: 'light', value: '#f8fafc' },
-      ],
+      options: {
+        dark: { name: 'dark', value: '#0f172a' },
+        light: { name: 'light', value: '#f8fafc' },
+      },
     },
   },
   // Mock window.electron for components that use IPC
@@ -28,6 +30,7 @@ const preview: Preview = {
             once: () => {},
           },
           platform: 'darwin' as const,
+          initialTheme: 'system',
         };
       }
       return Story();

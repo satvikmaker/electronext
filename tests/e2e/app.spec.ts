@@ -7,6 +7,30 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 let app: ElectronApplication;
 let page: Page;
 
+/**
+ * The app opens a splash window before the main window, and either may be
+ * reported first. Poll the currently-open windows instead of awaiting a future
+ * 'window' event, which deadlocks whenever the main window opened before we
+ * started listening.
+ */
+async function findMainWindow(electronApp: ElectronApplication, timeoutMs = 30_000): Promise<Page> {
+  const deadline = Date.now() + timeoutMs;
+
+  while (Date.now() < deadline) {
+    for (const candidate of electronApp.windows()) {
+      try {
+        await candidate.waitForLoadState('domcontentloaded');
+        if ((await candidate.title()).includes('ElectroNext')) return candidate;
+      } catch {
+        // The splash window closes while we inspect it — ignore and keep looking.
+      }
+    }
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+
+  throw new Error('Timed out waiting for the ElectroNext main window');
+}
+
 test.beforeAll(async () => {
   app = await electron.launch({
     args: [path.join(__dirname, '..', '..')],
@@ -16,17 +40,8 @@ test.beforeAll(async () => {
     },
   });
 
-  // The app opens a splash window first, then the main window.
-  // firstWindow() may return the splash. Check the title to verify.
-  page = await app.firstWindow();
-  await page.waitForLoadState('domcontentloaded');
-
-  const title = await page.title();
-  if (!title.includes('ElectroNext')) {
-    // We caught the splash screen — wait for the main window to appear
-    page = await app.waitForEvent('window');
-    await page.waitForLoadState('load');
-  }
+  page = await findMainWindow(app);
+  await page.waitForLoadState('load');
 });
 
 test.afterAll(async () => {
@@ -63,14 +78,14 @@ test('preload exposes expected ipc methods', async () => {
     return {
       hasInvoke: typeof ipc?.invoke === 'function',
       hasOn: typeof ipc?.on === 'function',
-      hasSend: typeof ipc?.send === 'function',
+      hasOnce: typeof ipc?.once === 'function',
       hasPlatform: typeof e?.platform === 'string',
     };
   });
 
   expect(methods.hasInvoke).toBe(true);
   expect(methods.hasOn).toBe(true);
-  expect(methods.hasSend).toBe(true);
+  expect(methods.hasOnce).toBe(true);
   expect(methods.hasPlatform).toBe(true);
 });
 

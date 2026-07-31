@@ -9,6 +9,14 @@ out/
 # Electron-builder output
 release/
 
+# Storybook output
+storybook-static/
+
+# Playwright output
+test-results/
+playwright-report/
+blob-report/
+
 # Environment
 .env
 .env.local

@@ -3,11 +3,12 @@ import { Provider } from 'react-redux';
 import { configureStore } from '@reduxjs/toolkit';
 import counterReducer from '@/lib/features/counterSlice';
 import themeReducer from '@/lib/features/themeSlice';
+import localeReducer from '@/lib/features/localeSlice';
 import Counter from '@/components/Counter';
 
 function createMockStore() {
   return configureStore({
-    reducer: { counter: counterReducer, theme: themeReducer },
+    reducer: { counter: counterReducer, theme: themeReducer, locale: localeReducer },
   });
 }
 

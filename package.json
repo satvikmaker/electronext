@@ -8,7 +8,7 @@
   "license": "MIT",
   "private": true,
   "engines": {
-    "node": ">=20.9.0"
+    "node": ">=22.22.1"
   },
   "scripts": {
     "dev": "node scripts/check-port.mjs && npm run build:electron && concurrently --kill-others \"npm run dev:renderer\" \"npm run dev:electron\"",
@@ -34,39 +34,40 @@
     "*.{ts,tsx,mjs}": "eslint --fix --no-warn-ignored"
   },
   "dependencies": {
-    "@reduxjs/toolkit": "^2.11.2",
-    "electron-log": "^5.4.3",
+    "better-sqlite3": "^13.0.2",
+    "electron-log": "^5.4.4",
     "electron-store": "^11.0.2",
-    "electron-updater": "^6.8.3",
-    "next": "^16.2.1",
-    "react": "^19.2.4",
-    "react-dom": "^19.2.4",
-    "react-redux": "^9.2.0"
+    "electron-updater": "^6.8.9"
   },
   "devDependencies": {
     "@electron/notarize": "^3.1.1",
-    "@playwright/test": "^1.58.2",
-    "@storybook/addon-essentials": "^8.6.14",
-    "@storybook/nextjs": "^10.3.3",
-    "@storybook/react": "^10.3.3",
-    "@tailwindcss/postcss": "^4.2.2",
-    "@types/node": "^25.5.0",
-    "@types/react": "^19.2.14",
-    "@types/react-dom": "^19.2.3",
-    "concurrently": "^9.2.1",
+    "@playwright/test": "^1.62.1",
+    "@reduxjs/toolkit": "^2.12.0",
+    "@storybook/nextjs": "^10.5.5",
+    "@storybook/react": "^10.5.5",
+    "@tailwindcss/postcss": "^4.3.3",
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/node": "^24.13.3",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.4",
+    "concurrently": "^10.0.4",
     "cross-env": "^10.1.0",
     "detect-port": "^2.1.0",
-    "electron": "^41.0.3",
-    "electron-builder": "^26.8.1",
+    "electron": "^43.2.0",
+    "electron-builder": "^26.15.3",
     "electron-devtools-installer": "^4.0.0",
-    "eslint": "^9.39.4",
-    "eslint-config-next": "^16.2.1",
+    "eslint": "^9.39.5",
+    "eslint-config-next": "^16.2.12",
     "husky": "^9.1.7",
-    "lint-staged": "^16.4.0",
-    "postcss": "^8.5.8",
-    "storybook": "^10.3.3",
-    "tailwindcss": "^4.2.2",
-    "typescript": "^6.0.2",
-    "wait-on": "^9.0.4"
+    "lint-staged": "^17.2.0",
+    "next": "^16.2.12",
+    "postcss": "^8.5.25",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "react-redux": "^9.3.0",
+    "storybook": "^10.5.5",
+    "tailwindcss": "^4.3.3",
+    "typescript": "^6.0.3",
+    "wait-on": "^9.1.0"
   }
 }

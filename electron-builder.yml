@@ -9,12 +9,20 @@ directories:
 files:
   - dist/**/*
   - resources/**/*
-  - electron/splash/**/*
+  - electron/migrations/**/*
   - "!node_modules/**/{test,tests,__tests__}/**"
   - "!node_modules/**/*.{md,ts,map}"
   - "!**/.git"
 
 asar: true
+
+# File associations — register the app to open these file types (#1)
+# Customize the extension, name, and MIME type for your app.
+fileAssociations:
+  - ext: enx
+    name: ElectroNext Document
+    role: Editor
+    mimeType: application/x-electronext
 
 afterSign: scripts/notarize.mjs
 
@@ -42,7 +50,10 @@ win:
   icon: resources/icon.ico
   target:
     - nsis
-  publisherName: ElectroNext
+  # `publisherName` moved under `signtoolOptions` in electron-builder 25.
+  # It must match the CN of your code-signing certificate exactly.
+  signtoolOptions:
+    publisherName: ElectroNext
 
 nsis:
   oneClick: false

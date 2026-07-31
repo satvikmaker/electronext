@@ -3,6 +3,17 @@ import { readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { randomBytes } from 'node:crypto';
 
+// A packaged app is launched by the OS, so NODE_ENV is simply not set — relying
+// on it alone made every shipped build fall into development mode and try to
+// load http://localhost:3000. `app.isPackaged` is the authoritative signal.
+// We normalise the variable itself so that other processes which inherit this
+// environment (notably the preload, which derives the userData path from it)
+// agree on the mode. The e2e suite still forces NODE_ENV=production while
+// running unpackaged, so the explicit override is honoured too.
+if (app.isPackaged && !process.env.NODE_ENV) {
+  process.env.NODE_ENV = 'production';
+}
+
 const isProd = process.env.NODE_ENV === 'production';
 const SCHEME = 'app';
 
@@ -95,11 +106,12 @@ export function registerAppProtocol(): void {
         const ext = path.extname(candidate);
 
         if (ext === '.html') {
-          // Generate a fresh nonce and inject into all <script> tags
+          // Generate a fresh nonce and inject into all <script> and <style> tags
           currentNonce = randomBytes(16).toString('base64');
           const html = data
             .toString('utf-8')
-            .replace(/<script(?=[\s>])/g, `<script nonce="${currentNonce}"`);
+            .replace(/<script(?=[\s>])/g, `<script nonce="${currentNonce}"`)
+            .replace(/<style(?=[\s>])/g, `<style nonce="${currentNonce}"`);
           return new Response(html, { headers: { 'Content-Type': MIME['.html'] } });
         }
 

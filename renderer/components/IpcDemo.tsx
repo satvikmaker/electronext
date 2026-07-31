@@ -1,15 +1,17 @@
 'use client';
 
 import { useState } from 'react';
+import { useTranslation } from '@/hooks/useTranslation';
 
 export default function IpcDemo() {
   const [pingResult, setPingResult] = useState<string | null>(null);
   const [appVersion, setAppVersion] = useState<string | null>(null);
+  const t = useTranslation();
 
   const handlePing = async () => {
     if (typeof window !== 'undefined' && window.electron) {
       const result = await window.electron.ipc.invoke('example:ping');
-      setPingResult(result as string);
+      setPingResult(result);
     } else {
       setPingResult('IPC not available (running in browser)');
     }
@@ -18,7 +20,7 @@ export default function IpcDemo() {
   const handleGetVersion = async () => {
     if (typeof window !== 'undefined' && window.electron) {
       const version = await window.electron.ipc.invoke('app:get-version');
-      setAppVersion(version as string);
+      setAppVersion(version);
     } else {
       setAppVersion('Not running in Electron');
     }
@@ -26,14 +28,14 @@ export default function IpcDemo() {
 
   return (
     <div className="rounded-2xl bg-surface p-6 shadow-lg">
-      <h2 className="mb-4 text-lg font-semibold text-text">IPC Communication</h2>
+      <h2 className="mb-4 text-lg font-semibold text-text">{t('ipc.title')}</h2>
       <div className="flex flex-col gap-3">
         <div className="flex items-center gap-3">
           <button
             onClick={handlePing}
             className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-primary-dark"
           >
-            Ping Main Process
+            {t('ipc.ping')}
           </button>
           {pingResult && (
             <span className="text-sm text-text-muted">
@@ -46,7 +48,7 @@ export default function IpcDemo() {
             onClick={handleGetVersion}
             className="rounded-lg bg-secondary px-4 py-2 text-sm font-medium text-white transition-colors hover:opacity-90"
           >
-            Get App Version
+            {t('ipc.version')}
           </button>
           {appVersion && (
             <span className="text-sm text-text-muted">

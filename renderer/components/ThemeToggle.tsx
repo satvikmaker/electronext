@@ -24,7 +24,7 @@ export default function ThemeToggle() {
       if (saved && saved !== theme) {
         dispatch(setTheme(saved as Theme));
       }
-    });
+    }).catch(() => {});
     // Only run on mount
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

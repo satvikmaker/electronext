@@ -41,11 +41,16 @@ export default async function notarizeMacos(context) {
   const appName = context.packager.appInfo.productFilename;
   const appPath = `${appOutDir}/${appName}.app`;
 
-  console.log(`Notarizing ${appPath}...`);
+  // Read the bundle id from electron-builder's resolved config rather than
+  // hardcoding it, so renaming `appId` in electron-builder.yml cannot silently
+  // desynchronise notarization from the app being notarized.
+  const appBundleId = context.packager.appInfo.id;
+
+  console.log(`Notarizing ${appPath} (${appBundleId})...`);
 
   await notarize({
     tool: 'notarytool',
-    appBundleId: 'com.electronext.app',
+    appBundleId,
     appPath,
     appleId: APPLE_ID,
     appleIdPassword: APPLE_ID_PASS,
