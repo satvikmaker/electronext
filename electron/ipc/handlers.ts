@@ -2,7 +2,7 @@ import { app, BrowserWindow, clipboard, dialog, Menu, nativeImage, Notification,
 import { stat } from 'node:fs/promises';
 import path from 'node:path';
 import { IPC_CHANNELS } from './channels.js';
-import type { ContextMenuItem, CrashReport, FileMetadata, MenuItemUpdate, NotificationOptions, OpenDialogOptions, SaveDialogOptions } from './schema.js';
+import type { ContextMenuItem, FileMetadata, MenuItemUpdate, NotificationOptions, OpenDialogOptions, SaveDialogOptions, SqlValue, RendererErrorPayload } from './schema.js';
 import { appStore } from '../services/store.js';
 import { resolveUrl } from '../helpers/resolve-path.js';
 import { createWindow } from '../helpers/create-window.js';
@@ -43,11 +43,15 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(IPC_CHANNELS.GET_APP_PATH, (_event, name: string) =>
     app.getPath(name as Parameters<typeof app.getPath>[0]));
 
-  ipcMain.handle(IPC_CHANNELS.REPORT_ERROR, (_event, error: { message: string; stack?: string; componentStack?: string }) => {
-    log.error('[Renderer Error]', error.message);
-    if (error.stack) log.error('[Stack]', error.stack);
-    if (error.componentStack) log.error('[Component Stack]', error.componentStack);
-  });
+  // Enriched here rather than in the renderer: the version, platform and clock
+  // all belong to main, and the renderer should not be trusted to report them.
+  ipcMain.handle(IPC_CHANNELS.REPORT_ERROR, (_event, error: RendererErrorPayload) =>
+    handleCrashReport({
+      ...error,
+      appVersion: app.getVersion(),
+      platform: process.platform,
+      timestamp: new Date().toISOString(),
+    }));
 
   ipcMain.handle(IPC_CHANNELS.GET_LOCALE, () => app.getLocale());
 
@@ -229,30 +233,17 @@ export function registerIpcHandlers(): void {
   });
   ipcMain.handle(IPC_CHANNELS.WORKER_CANCEL, (_event, workerId: string) => { workerManager.cancel(workerId); });
 
-  // ── Database (#2) ──────────────────────────────────────────────
-  // Block DDL and dangerous statements from renderer — only DML allowed
-  const FORBIDDEN_SQL = /^\s*(DROP|ALTER|CREATE|PRAGMA|ATTACH|DETACH|VACUUM)\b/i;
+  // ── Database ───────────────────────────────────────────────────
+  // Statement-kind enforcement lives in services/database.ts so a channel
+  // added later cannot forget it.
+  ipcMain.handle(IPC_CHANNELS.DB_QUERY, (_event, sql: string, params?: SqlValue[]) => dbQuery(sql, params));
+  ipcMain.handle(IPC_CHANNELS.DB_RUN, (_event, sql: string, params?: SqlValue[]) => dbRun(sql, params));
 
-  ipcMain.handle(IPC_CHANNELS.DB_QUERY, (_event, sql: string, params?: unknown[]) => {
-    if (FORBIDDEN_SQL.test(sql)) throw new Error('Forbidden SQL operation');
-    return dbQuery(sql, params);
-  });
-
-  ipcMain.handle(IPC_CHANNELS.DB_RUN, (_event, sql: string, params?: unknown[]) => {
-    if (FORBIDDEN_SQL.test(sql)) throw new Error('Forbidden SQL operation');
-    return dbRun(sql, params);
-  });
-
-  // ── Spell checker (#7) ─────────────────────────────────────────
+  // ── Spell checker ──────────────────────────────────────────────
   ipcMain.handle(IPC_CHANNELS.SPELLCHECK_GET_CONFIG, () => getSpellCheckerConfig());
   ipcMain.handle(IPC_CHANNELS.SPELLCHECK_SET_ENABLED, (_event, enabled: boolean) => { setSpellCheckerEnabled(enabled); });
   ipcMain.handle(IPC_CHANNELS.SPELLCHECK_SET_LANGUAGES, (_event, languages: string[]) => { setSpellCheckerLanguages(languages); });
   ipcMain.handle(IPC_CHANNELS.SPELLCHECK_ADD_WORD, (_event, word: string) => { addWordToSpellChecker(word); });
-
-  // ── Crash reporter (#6) ────────────────────────────────────────
-  ipcMain.handle(IPC_CHANNELS.CRASH_SEND_REPORT, (_event, report: CrashReport) => {
-    return handleCrashReport(report);
-  });
 
   // ── Example ─────────────────────────────────────────────────────
   ipcMain.handle(IPC_CHANNELS.PING, () => 'pong');

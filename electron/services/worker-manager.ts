@@ -1,11 +1,7 @@
 import { Worker } from 'node:worker_threads';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
 import log from './logger.js';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 interface WorkerCallbacks {
   onProgress(workerId: string, percent: number, message?: string): void;
@@ -37,7 +33,7 @@ class WorkerManager {
 
   start(taskName: string, data: unknown, callbacks: WorkerCallbacks): string {
     const workerId = randomUUID();
-    const workerPath = path.join(__dirname, '..', 'workers', `${taskName}.worker.js`);
+    const workerPath = path.join(import.meta.dirname, '..', 'workers', `${taskName}.worker.js`);
 
     try {
       const worker = new Worker(workerPath, {

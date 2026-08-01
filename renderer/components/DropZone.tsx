@@ -1,13 +1,7 @@
 'use client';
 
 import { useState, useCallback, type DragEvent } from 'react';
-
-interface FileInfo {
-  name: string;
-  path: string;
-  size: number;
-  isDirectory: boolean;
-}
+import type { FileMetadata } from '../../electron/ipc/schema';
 
 function formatBytes(bytes: number): string {
   if (bytes === 0) return '0 B';
@@ -19,7 +13,7 @@ function formatBytes(bytes: number): string {
 
 export default function DropZone() {
   const [isDragging, setIsDragging] = useState(false);
-  const [files, setFiles] = useState<FileInfo[]>([]);
+  const [files, setFiles] = useState<FileMetadata[]>([]);
 
   const handleDragOver = useCallback((e: DragEvent) => {
     e.preventDefault();
@@ -38,19 +32,15 @@ export default function DropZone() {
     e.stopPropagation();
     setIsDragging(false);
 
-    if (!window.electron) return;
+    const bridge = window.electron;
+    if (!bridge) return;
 
-    // Extract file paths from the drop event
-    const droppedFiles = Array.from(e.dataTransfer.files);
-    const paths = droppedFiles
-      .map((f) => (f as File & { path?: string }).path)
-      .filter((p): p is string => !!p);
-
+    // `File.path` was removed in Electron 32 — webUtils.getPathForFile is the
+    // replacement, bridged through the preload.
+    const paths = Array.from(e.dataTransfer.files).map((f) => bridge.getPathForFile(f));
     if (paths.length === 0) return;
 
-    // Get metadata from main process
-    const metadata = await window.electron.ipc.invoke('file:get-metadata', paths);
-    setFiles(metadata);
+    setFiles(await bridge.ipc.invoke('file:get-metadata', paths));
   }, []);
 
   return (

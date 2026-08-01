@@ -30,7 +30,7 @@ export default function About() {
             <span className="mt-0.5 rounded bg-secondary px-2 py-0.5 text-xs font-medium text-white">
               Desktop
             </span>
-            <span>Electron 41 with typed IPC and context isolation</span>
+            <span>Electron 43 with typed IPC and context isolation</span>
           </div>
           <div className="flex items-start gap-3">
             <span className="mt-0.5 rounded bg-primary px-2 py-0.5 text-xs font-medium text-white">

@@ -1,6 +1,7 @@
 import { createSlice, type PayloadAction } from '@reduxjs/toolkit';
 
-export type Locale = 'en' | 'es' | 'fr' | 'de' | 'ja';
+/** Locales with translations. Add one here and in lib/i18n/index.ts together. */
+export type Locale = 'en' | 'es';
 
 interface LocaleState {
   locale: Locale;

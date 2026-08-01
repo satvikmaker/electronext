@@ -93,37 +93,33 @@ export function registerAppProtocol(): void {
       // Not a directory — try as-is or with .html fallback
     }
 
-    // Try the exact path, then .html fallback
-    const candidates = [filePath];
-    if (!filePath.endsWith('.html')) {
-      candidates.push(filePath + '.html');
-      candidates.push(path.join(filePath, 'index.html'));
+    // `trailingSlash: true` in next.config.mjs means every route is exported as
+    // `route/index.html`, which the directory branch above already resolved — so
+    // a single read is enough. Extension fallbacks here would be unreachable.
+    let data: Buffer;
+    try {
+      data = await readFile(filePath);
+    } catch (err) {
+      // A missing file is a 404; anything else (EACCES, a corrupt asar) is a real
+      // fault and must not masquerade as one.
+      if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
+      return new Response('Not Found', { status: 404, headers: { 'Content-Type': 'text/plain' } });
     }
 
-    for (const candidate of candidates) {
-      try {
-        const data = await readFile(candidate);
-        const ext = path.extname(candidate);
-
-        if (ext === '.html') {
-          // Generate a fresh nonce and inject into all <script> and <style> tags
-          currentNonce = randomBytes(16).toString('base64');
-          const html = data
-            .toString('utf-8')
-            .replace(/<script(?=[\s>])/g, `<script nonce="${currentNonce}"`)
-            .replace(/<style(?=[\s>])/g, `<style nonce="${currentNonce}"`);
-          return new Response(html, { headers: { 'Content-Type': MIME['.html'] } });
-        }
-
-        return new Response(data, {
-          headers: { 'Content-Type': MIME[ext] || 'application/octet-stream' },
-        });
-      } catch {
-        continue;
-      }
+    const ext = path.extname(filePath);
+    if (ext === '.html') {
+      // Fresh nonce per page load, injected into every <script> and <style>.
+      currentNonce = randomBytes(16).toString('base64');
+      const html = data
+        .toString('utf-8')
+        .replace(/<script(?=[\s>])/g, `<script nonce="${currentNonce}"`)
+        .replace(/<style(?=[\s>])/g, `<style nonce="${currentNonce}"`);
+      return new Response(html, { headers: { 'Content-Type': MIME['.html'] } });
     }
 
-    return new Response('Not Found', { status: 404, headers: { 'Content-Type': 'text/plain' } });
+    return new Response(data, {
+      headers: { 'Content-Type': MIME[ext] || 'application/octet-stream' },
+    });
   });
 }
 

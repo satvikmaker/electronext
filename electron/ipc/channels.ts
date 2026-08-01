@@ -78,18 +78,16 @@ export const IPC_CHANNELS = {
   // Window push events
   MAXIMIZED_CHANGED: 'window:maximized-changed',
 
-  // Database (#2)
+  // Database
   DB_QUERY: 'db:query',
   DB_RUN: 'db:run',
 
-  // Spell checker (#7)
+  // Spell checker
   SPELLCHECK_GET_CONFIG: 'spellcheck:get-config',
   SPELLCHECK_SET_ENABLED: 'spellcheck:set-enabled',
   SPELLCHECK_SET_LANGUAGES: 'spellcheck:set-languages',
   SPELLCHECK_ADD_WORD: 'spellcheck:add-word',
 
-  // Crash reporter (#6)
-  CRASH_SEND_REPORT: 'crash:send-report',
 
   // Example
   PING: 'example:ping',

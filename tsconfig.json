@@ -1,7 +1,7 @@
 {
+  "//": "Solution-style root. The renderer is not a composite project (it is noEmit and imports types from electron/), so `npm run typecheck` checks it directly rather than through a project reference.",
   "references": [
-    { "path": "./electron" },
-    { "path": "./renderer" }
+    { "path": "./electron" }
   ],
   "files": []
 }

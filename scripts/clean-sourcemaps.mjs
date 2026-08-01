@@ -3,8 +3,6 @@
 /**
  * Removes .js.map files from production builds to prevent reverse engineering.
  * Runs automatically as part of `npm run dist`.
- *
- * Compatible with Node.js >= 20 (uses readdir recursive, not glob/Array.fromAsync).
  */
 
 import { readdir, rm } from 'node:fs/promises';

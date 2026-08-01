@@ -1,10 +1,7 @@
-import { BrowserWindow, BrowserWindowConstructorOptions, screen } from 'electron';
+import { app, BrowserWindow, BrowserWindowConstructorOptions, screen } from 'electron';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import Store from 'electron-store';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+import { USER_DATA_ARG } from '../ipc/schema.js';
 
 interface WindowState {
   x?: number;
@@ -58,7 +55,11 @@ export function createWindow(
     ...state,
     show: false,
     webPreferences: {
-      preload: path.join(__dirname, '..', 'preload.js'),
+      preload: path.join(import.meta.dirname, '..', 'preload.js'),
+      // The preload reads settings.json synchronously to avoid a theme flash,
+      // and cannot call app.getPath(). Hand it the resolved directory rather
+      // than letting it re-derive one from platform guesswork.
+      additionalArguments: [`${USER_DATA_ARG}${app.getPath('userData')}`],
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: false,

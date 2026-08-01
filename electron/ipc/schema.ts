@@ -27,6 +27,24 @@ export interface UpdateInfoSummary {
   releaseDate?: string;
 }
 
+/**
+ * Prefix of the launch argument carrying the userData directory to the preload.
+ *
+ * Lives here because this module has no imports of its own, so both the main
+ * process and the preload can read it without dragging anything else along.
+ */
+export const USER_DATA_ARG = '--user-data-path=';
+
+/** Colour scheme preference. Crosses IPC and is persisted to settings.json. */
+export type Theme = 'light' | 'dark' | 'system';
+
+export const THEMES: readonly Theme[] = ['light', 'dark', 'system'];
+
+/** Narrow an untrusted value (settings.json is user-editable) to a Theme. */
+export function isTheme(value: unknown): value is Theme {
+  return typeof value === 'string' && (THEMES as readonly string[]).includes(value);
+}
+
 export interface NotificationOptions {
   title: string;
   body: string;
@@ -74,9 +92,19 @@ export interface WorkerResult {
   error?: string;
 }
 
+/** The value types SQLite can store and return. */
+export type SqlValue = string | number | bigint | Uint8Array | null;
+
+/** A result row keyed by column name. */
+export type SqlRow = Record<string, SqlValue>;
+
 export interface DbQueryResult {
-  rows: Record<string, unknown>[];
-  changes?: number;
+  rows: SqlRow[];
+}
+
+export interface DbRunResult {
+  changes: number;
+  lastInsertRowid: number;
 }
 
 export interface SpellCheckerConfig {
@@ -85,10 +113,15 @@ export interface SpellCheckerConfig {
   availableLanguages: string[];
 }
 
-export interface CrashReport {
+/** What the renderer knows about an error it caught. */
+export interface RendererErrorPayload {
   message: string;
   stack?: string;
   componentStack?: string;
+}
+
+/** A renderer error enriched by the main process before reporting. */
+export interface CrashReport extends RendererErrorPayload {
   appVersion: string;
   platform: string;
   timestamp: string;
@@ -100,7 +133,7 @@ export interface IpcSchema {
   // App info
   'app:get-version': { args: []; return: string };
   'app:get-path': { args: [name: string]; return: string };
-  'app:report-error': { args: [error: { message: string; stack?: string; componentStack?: string }]; return: void };
+  'app:report-error': { args: [error: RendererErrorPayload]; return: void };
   'app:get-locale': { args: []; return: string };
   'app:set-progress': { args: [progress: number]; return: void };
   'app:set-badge-count': { args: [count: number]; return: void };
@@ -158,18 +191,15 @@ export interface IpcSchema {
   'worker:start': { args: [taskName: string, data: unknown]; return: string };
   'worker:cancel': { args: [workerId: string]; return: void };
 
-  // Database (#2)
-  'db:query': { args: [sql: string, params?: unknown[]]; return: DbQueryResult };
-  'db:run': { args: [sql: string, params?: unknown[]]; return: { changes: number; lastInsertRowid: number } };
+  // Database
+  'db:query': { args: [sql: string, params?: SqlValue[]]; return: DbQueryResult };
+  'db:run': { args: [sql: string, params?: SqlValue[]]; return: DbRunResult };
 
-  // Spell checker (#7)
+  // Spell checker
   'spellcheck:get-config': { args: []; return: SpellCheckerConfig };
   'spellcheck:set-enabled': { args: [enabled: boolean]; return: void };
   'spellcheck:set-languages': { args: [languages: string[]]; return: void };
   'spellcheck:add-word': { args: [word: string]; return: void };
-
-  // Crash reporter (#6)
-  'crash:send-report': { args: [report: CrashReport]; return: void };
 
   // Example
   'example:ping': { args: []; return: string };

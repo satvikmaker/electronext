@@ -12,16 +12,20 @@ interface State {
 }
 
 /**
- * Reports an error to the main process via IPC for logging.
+ * Report an error to the main process, which logs it and forwards it to
+ * CRASH_REPORT_URL when configured.
  */
 function reportErrorToMain(error: Error, componentStack?: string): void {
-  if (typeof window !== 'undefined' && window.electron) {
-    window.electron.ipc.invoke('app:report-error', {
+  if (typeof window === 'undefined' || !window.electron) return;
+
+  window.electron.ipc
+    .invoke('app:report-error', {
       message: error.message,
       stack: error.stack,
       componentStack: componentStack ?? undefined,
-    });
-  }
+    })
+    // A failing reporter must not itself become a silent unhandled rejection.
+    .catch((err: unknown) => console.error('Failed to report error to main process:', err));
 }
 
 /**

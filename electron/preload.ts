@@ -1,28 +1,32 @@
-import { contextBridge, ipcRenderer, IpcRendererEvent } from 'electron';
+import { contextBridge, ipcRenderer, IpcRendererEvent, webUtils } from 'electron';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import type { IpcSchema, IpcPushEvents, IpcChannel, IpcPushChannel } from './ipc/schema.js';
+import { isTheme, USER_DATA_ARG, type IpcSchema, type IpcPushEvents, type IpcChannel, type IpcPushChannel, type Theme } from './ipc/schema.js';
 
 /**
- * Read the initial theme synchronously from electron-store's JSON file.
- * This runs in the preload (Node context) and avoids any async IPC round-trip,
- * so it can be consumed by an inline <script> before React hydrates.
+ * Read the persisted theme synchronously so the inline script in layout.tsx can
+ * apply it before React hydrates. An async IPC round-trip would flash the wrong
+ * colour scheme on every launch.
+ *
+ * The userData directory is supplied by the main process via `additionalArguments`
+ * (see helpers/create-window.ts); deriving it here would duplicate the app name
+ * and dev-suffix and break silently whenever either changed.
  */
-function readInitialTheme(): string {
+function readInitialTheme(): Theme {
+  const userDataPath = process.argv.find((arg) => arg.startsWith(USER_DATA_ARG))?.slice(USER_DATA_ARG.length);
+  if (!userDataPath) return 'system';
+
+  let contents: string;
   try {
-    // electron-store saves settings to {userData}/settings.json
-    const userDataPath = process.env.APPDATA
-      || (process.platform === 'darwin'
-        ? join(process.env.HOME || '', 'Library', 'Application Support')
-        : join(process.env.HOME || '', '.config'));
-    const appName = 'electronext'; // matches package.json name
-    const suffix = process.env.NODE_ENV !== 'production' ? ' (development)' : '';
-    const settingsPath = join(userDataPath, appName + suffix, 'settings.json');
-    const data = JSON.parse(readFileSync(settingsPath, 'utf-8'));
-    return data.theme || 'system';
+    contents = readFileSync(join(userDataPath, 'settings.json'), 'utf-8');
   } catch {
-    return 'system';
+    return 'system'; // No settings file yet — first launch.
   }
+
+  // settings.json is user-editable, so the stored value is untrusted.
+  const parsed: unknown = JSON.parse(contents);
+  const stored = (parsed as { theme?: unknown } | null)?.theme;
+  return isTheme(stored) ? stored : 'system';
 }
 
 const electronHandler = {
@@ -50,11 +54,21 @@ const electronHandler = {
       channel: K,
       callback: (data: IpcPushEvents[K]) => void
     ): void {
-      ipcRenderer.once(channel, (_event, data) => callback(data));
+      ipcRenderer.once(channel, (_event: IpcRendererEvent, data: IpcPushEvents[K]) => callback(data));
     },
   },
 
-  platform: process.platform as NodeJS.Platform,
+  platform: process.platform,
+
+  /**
+   * Resolve the absolute path of a dropped or picked File.
+   *
+   * Electron 32 removed the `File.path` augmentation; this is its replacement
+   * and must be called from the preload, where `webUtils` is available.
+   */
+  getPathForFile(file: File): string {
+    return webUtils.getPathForFile(file);
+  },
 
   /** Synchronous initial theme value — available before React hydrates. */
   initialTheme: readInitialTheme(),

@@ -16,7 +16,7 @@ files:
 
 asar: true
 
-# File associations — register the app to open these file types (#1)
+# File associations — register the app to open these file types
 # Customize the extension, name, and MIME type for your app.
 fileAssociations:
   - ext: enx

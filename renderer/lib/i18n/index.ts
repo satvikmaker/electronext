@@ -4,14 +4,12 @@ import es from './messages/es.json';
 
 type Messages = Record<string, string>;
 
+// Add a language by importing its JSON here and adding it to both this record
+// and AVAILABLE_LOCALES below. `Record<Locale, …>` makes a missing one a
+// compile error rather than a silent fall-through to English.
 const messagesByLocale: Record<Locale, Messages> = {
   en,
   es,
-  // Add new languages here. Import the JSON file and add the entry.
-  // fr, de, ja are declared in Locale type but not yet translated.
-  fr: en,
-  de: en,
-  ja: en,
 };
 
 /**
@@ -24,7 +22,7 @@ const messagesByLocale: Record<Locale, Messages> = {
  * and to the raw key if not found in English either.
  */
 export function getTranslator(locale: Locale) {
-  const messages = messagesByLocale[locale] ?? en;
+  const messages = messagesByLocale[locale];
 
   return function t(key: string, params?: Record<string, string | number>): string {
     let message = messages[key] ?? en[key as keyof typeof en] ?? key;

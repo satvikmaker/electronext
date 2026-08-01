@@ -7,7 +7,6 @@ const eslintConfig = [
       'dist/**',
       'release/**',
       '**/.next/**',
-      'out/**',
       'electron/**',
       'tests/**',
       'scripts/**',

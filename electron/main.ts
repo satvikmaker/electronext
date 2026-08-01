@@ -1,4 +1,4 @@
-import { app, BrowserWindow, globalShortcut, ipcMain } from 'electron';
+import { app, BrowserWindow, dialog, globalShortcut, ipcMain } from 'electron';
 import path from 'node:path';
 import { createWindow } from './helpers/create-window.js';
 import { resolveUrl, isProd, registerAppProtocol } from './helpers/resolve-path.js';
@@ -114,7 +114,7 @@ async function createMainWindow(): Promise<void> {
       mainWindow?.webContents.openDevTools();
     }
 
-    // Send any pending file that was opened before the window was ready (#1)
+    // Send any pending file that was opened before the window was ready
     if (pendingFilePath && mainWindow) {
       mainWindow.webContents.send(IPC_CHANNELS.FILE_OPENED, pendingFilePath);
       pendingFilePath = null;
@@ -167,6 +167,12 @@ app.whenReady().then(async () => {
       await createMainWindow();
     }
   });
+}).catch((err: unknown) => {
+  // Without this, a failure in database/protocol/spell-checker setup surfaces as
+  // an unhandled rejection: splash screen on screen, no window, no explanation.
+  log.error('Fatal startup failure:', err);
+  dialog.showErrorBox('ElectroNext failed to start', err instanceof Error ? (err.stack ?? err.message) : String(err));
+  app.exit(1);
 });
 
 app.on('window-all-closed', () => {
