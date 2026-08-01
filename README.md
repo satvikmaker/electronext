@@ -44,7 +44,15 @@ builds, ESLint, husky + lint-staged, GitHub Actions for CI and releases.
 
 - **Node.js >= 22.22.1** (`engines` enforces this; Node 24 recommended — it matches
   Electron 43's bundled runtime)
-- npm 10+
+- **npm as pinned in `packageManager`** (currently `npm@11.5.1`)
+
+The npm pin is load-bearing. npm releases disagree about which optional dependency
+subtrees belong in a lockfile — `electron-winstaller`'s Windows-signing subtree is
+one — and `npm ci` rejects a lockfile a different npm would have written, even on
+the same OS. CI installs the pinned npm before `npm ci` for that reason.
+
+If you regenerate `package-lock.json`, do it with the pinned npm, or bump
+`packageManager` and the version in both workflow files together.
 
 ## Quick start
 
