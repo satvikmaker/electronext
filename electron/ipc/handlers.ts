@@ -1,11 +1,12 @@
-import { app, BrowserWindow, clipboard, dialog, Menu, nativeImage, Notification, ipcMain, globalShortcut } from 'electron';
+import { app, BrowserWindow, clipboard, dialog, Menu, nativeImage, Notification, globalShortcut } from 'electron';
 import { stat } from 'node:fs/promises';
 import path from 'node:path';
 import { IPC_CHANNELS } from './channels.js';
-import type { ContextMenuItem, FileMetadata, MenuItemUpdate, NotificationOptions, OpenDialogOptions, SaveDialogOptions, SqlValue, RendererErrorPayload } from './schema.js';
+import { handle, sendTo } from './typed-ipc.js';
+import type { FileMetadata } from './schema.js';
 import { appStore } from '../services/store.js';
 import { resolveUrl } from '../helpers/resolve-path.js';
-import { createWindow } from '../helpers/create-window.js';
+import { createWindow, getWindow } from '../helpers/create-window.js';
 import { secureStore } from '../services/secure-store.js';
 import { menuItemRegistry } from '../services/menu.js';
 import { workerManager } from '../services/worker-manager.js';
@@ -13,8 +14,6 @@ import { dbQuery, dbRun } from '../services/database.js';
 import { handleCrashReport } from '../services/crash-reporter.js';
 import { getSpellCheckerConfig, setSpellCheckerEnabled, setSpellCheckerLanguages, addWordToSpellChecker } from '../services/spell-checker.js';
 import log from '../services/logger.js';
-
-const windowRegistry = new Map<string, BrowserWindow>();
 
 /**
  * Last directory the user picked in a file dialog.
@@ -38,14 +37,14 @@ function rememberDialogDir(selectedPath: string, isDirectory: boolean): void {
 
 export function registerIpcHandlers(): void {
   // ── App info ────────────────────────────────────────────────────
-  ipcMain.handle(IPC_CHANNELS.GET_APP_VERSION, () => app.getVersion());
+  handle(IPC_CHANNELS.GET_APP_VERSION, () => app.getVersion());
 
-  ipcMain.handle(IPC_CHANNELS.GET_APP_PATH, (_event, name: string) =>
-    app.getPath(name as Parameters<typeof app.getPath>[0]));
+  handle(IPC_CHANNELS.GET_APP_PATH, (_event, name) =>
+    app.getPath(name));
 
   // Enriched here rather than in the renderer: the version, platform and clock
   // all belong to main, and the renderer should not be trusted to report them.
-  ipcMain.handle(IPC_CHANNELS.REPORT_ERROR, (_event, error: RendererErrorPayload) =>
+  handle(IPC_CHANNELS.REPORT_ERROR, (_event, error) =>
     handleCrashReport({
       ...error,
       appVersion: app.getVersion(),
@@ -53,13 +52,13 @@ export function registerIpcHandlers(): void {
       timestamp: new Date().toISOString(),
     }));
 
-  ipcMain.handle(IPC_CHANNELS.GET_LOCALE, () => app.getLocale());
+  handle(IPC_CHANNELS.GET_LOCALE, () => app.getLocale());
 
-  ipcMain.handle(IPC_CHANNELS.SET_PROGRESS, (event, progress: number) => {
+  handle(IPC_CHANNELS.SET_PROGRESS, (event, progress) => {
     BrowserWindow.fromWebContents(event.sender)?.setProgressBar(progress < 0 ? -1 : progress);
   });
 
-  ipcMain.handle(IPC_CHANNELS.SET_BADGE_COUNT, (_event, count: number) => {
+  handle(IPC_CHANNELS.SET_BADGE_COUNT, (_event, count) => {
     if (process.platform === 'darwin' || process.platform === 'linux') {
       app.setBadgeCount(count);
     }
@@ -69,44 +68,47 @@ export function registerIpcHandlers(): void {
     }
   });
 
-  ipcMain.handle(IPC_CHANNELS.GET_LOGIN_SETTINGS, () => {
+  handle(IPC_CHANNELS.GET_LOGIN_SETTINGS, () => {
     return { openAtLogin: app.getLoginItemSettings().openAtLogin };
   });
 
-  ipcMain.handle(IPC_CHANNELS.SET_LOGIN_SETTINGS, (_event, openAtLogin: boolean) => {
+  handle(IPC_CHANNELS.SET_LOGIN_SETTINGS, (_event, openAtLogin) => {
     app.setLoginItemSettings({ openAtLogin });
   });
 
   // ── Settings ────────────────────────────────────────────────────
-  ipcMain.handle(IPC_CHANNELS.GET_SETTINGS, (_event, key: string) => appStore.get(key));
-  ipcMain.handle(IPC_CHANNELS.SET_SETTINGS, (_event, key: string, value: unknown) => { appStore.set(key, value); });
+  handle(IPC_CHANNELS.GET_SETTINGS, (_event, key) => appStore.get(key));
+  handle(IPC_CHANNELS.SET_SETTINGS, (_event, key, value) => { appStore.set(key, value); });
 
   // ── Window controls ─────────────────────────────────────────────
-  ipcMain.handle(IPC_CHANNELS.MINIMIZE_WINDOW, (event) => { BrowserWindow.fromWebContents(event.sender)?.minimize(); });
+  handle(IPC_CHANNELS.MINIMIZE_WINDOW, (event) => { BrowserWindow.fromWebContents(event.sender)?.minimize(); });
 
-  ipcMain.handle(IPC_CHANNELS.MAXIMIZE_WINDOW, (event) => {
+  handle(IPC_CHANNELS.MAXIMIZE_WINDOW, (event) => {
     const win = BrowserWindow.fromWebContents(event.sender);
     if (win?.isMaximized()) win.unmaximize(); else win?.maximize();
   });
 
-  ipcMain.handle(IPC_CHANNELS.CLOSE_WINDOW, (event) => { BrowserWindow.fromWebContents(event.sender)?.close(); });
+  handle(IPC_CHANNELS.CLOSE_WINDOW, (event) => { BrowserWindow.fromWebContents(event.sender)?.close(); });
 
-  ipcMain.handle(IPC_CHANNELS.IS_MAXIMIZED, (event) =>
+  handle(IPC_CHANNELS.IS_MAXIMIZED, (event) =>
     BrowserWindow.fromWebContents(event.sender)?.isMaximized() ?? false);
 
+  handle(IPC_CHANNELS.TOGGLE_DEVTOOLS, (event) => {
+    const contents = event.sender;
+    if (contents.isDevToolsOpened()) contents.closeDevTools(); else contents.openDevTools();
+  });
+
   // ── Multi-window ──────────────────────────────────────────────
-  ipcMain.handle(IPC_CHANNELS.OPEN_WINDOW, (_event, name: string, route: string) => {
-    const existing = windowRegistry.get(name);
-    if (existing && !existing.isDestroyed()) { existing.focus(); return; }
+  handle(IPC_CHANNELS.OPEN_WINDOW, (_event, name, route) => {
+    const existing = getWindow(name);
+    if (existing) { existing.focus(); return; }
     const win = createWindow(name, { width: 700, height: 500, minWidth: 400, minHeight: 300 });
     win.once('ready-to-show', () => win.show());
-    win.loadURL(resolveUrl(route));
-    win.on('closed', () => windowRegistry.delete(name));
-    windowRegistry.set(name, win);
+    void win.loadURL(resolveUrl(route));
   });
 
   // ── File metadata ──────────────────────────────────────────────
-  ipcMain.handle(IPC_CHANNELS.FILE_GET_METADATA, async (_event, paths: string[]) => {
+  handle(IPC_CHANNELS.FILE_GET_METADATA, async (_event, paths) => {
     const results: FileMetadata[] = [];
     for (const filePath of paths) {
       try {
@@ -118,7 +120,7 @@ export function registerIpcHandlers(): void {
   });
 
   // ── Notifications ──────────────────────────────────────────────
-  ipcMain.handle(IPC_CHANNELS.NOTIFICATION_SHOW, (_event, options: NotificationOptions) => {
+  handle(IPC_CHANNELS.NOTIFICATION_SHOW, (_event, options) => {
     if (!Notification.isSupported()) { log.warn('Notifications not supported'); return; }
     const notification = new Notification({
       title: options.title, body: options.body, silent: options.silent ?? false,
@@ -134,11 +136,11 @@ export function registerIpcHandlers(): void {
   });
 
   // ── Global shortcuts ───────────────────────────────────────────
-  ipcMain.handle(IPC_CHANNELS.SHORTCUTS_REGISTER, (event, accelerator: string, id: string) => {
+  handle(IPC_CHANNELS.SHORTCUTS_REGISTER, (event, accelerator, id) => {
     try {
       return globalShortcut.register(accelerator, () => {
         const win = BrowserWindow.fromWebContents(event.sender);
-        if (win && !win.isDestroyed()) win.webContents.send(IPC_CHANNELS.SHORTCUT_TRIGGERED, id);
+        sendTo(win, IPC_CHANNELS.SHORTCUT_TRIGGERED, id);
       });
     } catch (err) {
       log.warn(`Failed to register shortcut "${accelerator}":`, err);
@@ -146,10 +148,10 @@ export function registerIpcHandlers(): void {
     }
   });
 
-  ipcMain.handle(IPC_CHANNELS.SHORTCUTS_UNREGISTER, (_event, accelerator: string) => { globalShortcut.unregister(accelerator); });
+  handle(IPC_CHANNELS.SHORTCUTS_UNREGISTER, (_event, accelerator) => { globalShortcut.unregister(accelerator); });
 
   // ── Context menu ───────────────────────────────────────────────
-  ipcMain.handle(IPC_CHANNELS.CONTEXT_MENU_SHOW, (event, items: ContextMenuItem[]) => {
+  handle(IPC_CHANNELS.CONTEXT_MENU_SHOW, (event, items) => {
     return new Promise<string | null>((resolve) => {
       const win = BrowserWindow.fromWebContents(event.sender);
       if (!win) { resolve(null); return; }
@@ -164,12 +166,12 @@ export function registerIpcHandlers(): void {
   });
 
   // ── Secure storage ─────────────────────────────────────────────
-  ipcMain.handle(IPC_CHANNELS.SECURE_SET, (_event, key: string, value: string) => secureStore.set(key, value));
-  ipcMain.handle(IPC_CHANNELS.SECURE_GET, (_event, key: string) => secureStore.get(key));
-  ipcMain.handle(IPC_CHANNELS.SECURE_DELETE, (_event, key: string) => secureStore.delete(key));
+  handle(IPC_CHANNELS.SECURE_SET, (_event, key, value) => secureStore.set(key, value));
+  handle(IPC_CHANNELS.SECURE_GET, (_event, key) => secureStore.get(key));
+  handle(IPC_CHANNELS.SECURE_DELETE, (_event, key) => secureStore.delete(key));
 
   // ── File dialogs ───────────────────────────────────────────────
-  ipcMain.handle(IPC_CHANNELS.DIALOG_OPEN_FILE, async (event, options?: OpenDialogOptions) => {
+  handle(IPC_CHANNELS.DIALOG_OPEN_FILE, async (event, options) => {
     const win = BrowserWindow.fromWebContents(event.sender);
     if (!win) return [];
     const properties: Electron.OpenDialogOptions['properties'] = ['openFile'];
@@ -183,7 +185,7 @@ export function registerIpcHandlers(): void {
     return result.filePaths;
   });
 
-  ipcMain.handle(IPC_CHANNELS.DIALOG_SAVE_FILE, async (event, options?: SaveDialogOptions) => {
+  handle(IPC_CHANNELS.DIALOG_SAVE_FILE, async (event, options) => {
     const win = BrowserWindow.fromWebContents(event.sender);
     if (!win) return null;
     const result = await dialog.showSaveDialog(win, {
@@ -195,7 +197,7 @@ export function registerIpcHandlers(): void {
   });
 
   // ── Menu update ────────────────────────────────────────────────
-  ipcMain.handle(IPC_CHANNELS.MENU_UPDATE_ITEM, (_event, update: MenuItemUpdate) => {
+  handle(IPC_CHANNELS.MENU_UPDATE_ITEM, (_event, update) => {
     const item = menuItemRegistry.get(update.id);
     if (!item) { log.warn(`Menu item not found: ${update.id}`); return; }
     if (update.enabled !== undefined) item.enabled = update.enabled;
@@ -205,46 +207,46 @@ export function registerIpcHandlers(): void {
   });
 
   // ── Clipboard ──────────────────────────────────────────────────
-  ipcMain.handle(IPC_CHANNELS.CLIPBOARD_READ_TEXT, () => clipboard.readText());
-  ipcMain.handle(IPC_CHANNELS.CLIPBOARD_WRITE_TEXT, (_event, text: string) => clipboard.writeText(text));
-  ipcMain.handle(IPC_CHANNELS.CLIPBOARD_HAS_TEXT, () => clipboard.readText().length > 0);
-  ipcMain.handle(IPC_CHANNELS.CLIPBOARD_READ_IMAGE, () => {
+  handle(IPC_CHANNELS.CLIPBOARD_READ_TEXT, () => clipboard.readText());
+  handle(IPC_CHANNELS.CLIPBOARD_WRITE_TEXT, (_event, text) => clipboard.writeText(text));
+  handle(IPC_CHANNELS.CLIPBOARD_HAS_TEXT, () => clipboard.readText().length > 0);
+  handle(IPC_CHANNELS.CLIPBOARD_READ_IMAGE, () => {
     const img = clipboard.readImage();
     return img.isEmpty() ? null : img.toDataURL();
   });
-  ipcMain.handle(IPC_CHANNELS.CLIPBOARD_WRITE_IMAGE, (_event, dataUrl: string) => {
+  handle(IPC_CHANNELS.CLIPBOARD_WRITE_IMAGE, (_event, dataUrl) => {
     clipboard.writeImage(nativeImage.createFromDataURL(dataUrl));
   });
 
   // ── Workers ────────────────────────────────────────────────────
-  ipcMain.handle(IPC_CHANNELS.WORKER_START, (event, taskName: string, data: unknown) => {
+  handle(IPC_CHANNELS.WORKER_START, (event, taskName, data) => {
     const sender = event.sender;
     return workerManager.start(taskName, data, {
       onProgress(workerId, percent, message) {
-        if (!sender.isDestroyed()) sender.send(IPC_CHANNELS.WORKER_PROGRESS, { workerId, percent, message });
+        sendTo(sender, IPC_CHANNELS.WORKER_PROGRESS, { workerId, percent, message });
       },
       onComplete(workerId, result) {
-        if (!sender.isDestroyed()) sender.send(IPC_CHANNELS.WORKER_COMPLETE, { workerId, data: result });
+        sendTo(sender, IPC_CHANNELS.WORKER_COMPLETE, { workerId, data: result });
       },
       onError(workerId, error) {
-        if (!sender.isDestroyed()) sender.send(IPC_CHANNELS.WORKER_ERROR, { workerId, data: null, error });
+        sendTo(sender, IPC_CHANNELS.WORKER_ERROR, { workerId, data: null, error });
       },
     });
   });
-  ipcMain.handle(IPC_CHANNELS.WORKER_CANCEL, (_event, workerId: string) => { workerManager.cancel(workerId); });
+  handle(IPC_CHANNELS.WORKER_CANCEL, (_event, workerId) => { workerManager.cancel(workerId); });
 
   // ── Database ───────────────────────────────────────────────────
   // Statement-kind enforcement lives in services/database.ts so a channel
   // added later cannot forget it.
-  ipcMain.handle(IPC_CHANNELS.DB_QUERY, (_event, sql: string, params?: SqlValue[]) => dbQuery(sql, params));
-  ipcMain.handle(IPC_CHANNELS.DB_RUN, (_event, sql: string, params?: SqlValue[]) => dbRun(sql, params));
+  handle(IPC_CHANNELS.DB_QUERY, (_event, sql, params) => dbQuery(sql, params));
+  handle(IPC_CHANNELS.DB_RUN, (_event, sql, params) => dbRun(sql, params));
 
   // ── Spell checker ──────────────────────────────────────────────
-  ipcMain.handle(IPC_CHANNELS.SPELLCHECK_GET_CONFIG, () => getSpellCheckerConfig());
-  ipcMain.handle(IPC_CHANNELS.SPELLCHECK_SET_ENABLED, (_event, enabled: boolean) => { setSpellCheckerEnabled(enabled); });
-  ipcMain.handle(IPC_CHANNELS.SPELLCHECK_SET_LANGUAGES, (_event, languages: string[]) => { setSpellCheckerLanguages(languages); });
-  ipcMain.handle(IPC_CHANNELS.SPELLCHECK_ADD_WORD, (_event, word: string) => { addWordToSpellChecker(word); });
+  handle(IPC_CHANNELS.SPELLCHECK_GET_CONFIG, () => getSpellCheckerConfig());
+  handle(IPC_CHANNELS.SPELLCHECK_SET_ENABLED, (_event, enabled) => { setSpellCheckerEnabled(enabled); });
+  handle(IPC_CHANNELS.SPELLCHECK_SET_LANGUAGES, (_event, languages) => { setSpellCheckerLanguages(languages); });
+  handle(IPC_CHANNELS.SPELLCHECK_ADD_WORD, (_event, word) => { addWordToSpellChecker(word); });
 
   // ── Example ─────────────────────────────────────────────────────
-  ipcMain.handle(IPC_CHANNELS.PING, () => 'pong');
+  handle(IPC_CHANNELS.PING, () => 'pong');
 }

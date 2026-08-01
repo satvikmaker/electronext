@@ -2,6 +2,7 @@ import { test, expect, _electron as electron, type ElectronApplication, type Pag
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { findMainWindow, invoke } from './helpers';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const releaseDir = path.join(__dirname, '..', '..', 'release');
@@ -46,24 +47,7 @@ test.describe('packaged app', () => {
 
     app = await electron.launch({ executablePath: binary!, env });
 
-    const deadline = Date.now() + 30_000;
-    while (Date.now() < deadline) {
-      for (const candidate of app.windows()) {
-        try {
-          await candidate.waitForLoadState('domcontentloaded');
-          if ((await candidate.title()).includes('ElectroNext')) {
-            page = candidate;
-            break;
-          }
-        } catch {
-          // Splash window closed while being inspected — keep looking.
-        }
-      }
-      if (page) break;
-      await new Promise((resolve) => setTimeout(resolve, 100));
-    }
-
-    if (!page) throw new Error('Timed out waiting for the packaged main window');
+    page = await findMainWindow(app);
     await page.waitForLoadState('load');
   });
 
@@ -81,20 +65,10 @@ test.describe('packaged app', () => {
   });
 
   test('main-process IPC works inside the asar', async () => {
-    const pong = await page.evaluate(() => {
-      const e = (window as Record<string, unknown>).electron as Record<string, unknown>;
-      const ipc = e.ipc as Record<string, (...args: unknown[]) => Promise<unknown>>;
-      return ipc.invoke('example:ping');
-    });
-    expect(pong).toBe('pong');
+    expect(await invoke(page, 'example:ping')).toBe('pong');
   });
 
   test('the native better-sqlite3 binding loads from asar.unpacked', async () => {
-    const result = await page.evaluate(() => {
-      const e = (window as Record<string, unknown>).electron as Record<string, unknown>;
-      const ipc = e.ipc as Record<string, (...args: unknown[]) => Promise<unknown>>;
-      return ipc.invoke('db:query', 'SELECT 1 as ok', []);
-    });
-    expect(result).toEqual({ rows: [{ ok: 1 }] });
+    expect(await invoke(page, 'db:query', 'SELECT 1 as ok', [])).toEqual({ rows: [{ ok: 1 }] });
   });
 });

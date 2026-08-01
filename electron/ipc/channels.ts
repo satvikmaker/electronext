@@ -1,3 +1,5 @@
+import type { IpcChannel, IpcPushChannel } from './schema.js';
+
 /**
  * IPC channel constants.
  * String values match the keys in IpcSchema exactly.
@@ -23,6 +25,7 @@ export const IPC_CHANNELS = {
   CLOSE_WINDOW: 'window:close',
   IS_MAXIMIZED: 'window:is-maximized',
   OPEN_WINDOW: 'window:open',
+  TOGGLE_DEVTOOLS: 'window:toggle-devtools',
 
   // Auto-update
   CHECK_FOR_UPDATES: 'updater:check',
@@ -91,6 +94,8 @@ export const IPC_CHANNELS = {
 
   // Example
   PING: 'example:ping',
-} as const;
+  // `satisfies` makes a constant that does not name a real channel a compile
+  // error here, so these stay in step with schema.ts.
+} as const satisfies Record<string, IpcChannel | IpcPushChannel>;
 
 export type { IpcChannel, IpcPushChannel } from './schema.js';

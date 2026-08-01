@@ -41,7 +41,7 @@ export default function CommandPalette() {
     { id: 'dev-reload', label: 'Reload Window', category: 'Developer', shortcut: 'Ctrl+R', action: () => window.location.reload() },
     {
       id: 'dev-devtools', label: 'Toggle Developer Tools', category: 'Developer', shortcut: 'F12',
-      action: () => window.electron?.ipc.invoke('window:open', 'devtools', ''),
+      action: () => void window.electron?.ipc.invoke('window:toggle-devtools'),
     },
     {
       id: 'app-version', label: 'Show App Version', category: 'App',

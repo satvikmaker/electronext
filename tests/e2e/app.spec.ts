@@ -1,35 +1,12 @@
 import { test, expect, _electron as electron, type ElectronApplication, type Page } from '@playwright/test';
 import path from 'node:path';
+import { findMainWindow, invoke } from './helpers';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 let app: ElectronApplication;
 let page: Page;
-
-/**
- * The app opens a splash window before the main window, and either may be
- * reported first. Poll the currently-open windows instead of awaiting a future
- * 'window' event, which deadlocks whenever the main window opened before we
- * started listening.
- */
-async function findMainWindow(electronApp: ElectronApplication, timeoutMs = 30_000): Promise<Page> {
-  const deadline = Date.now() + timeoutMs;
-
-  while (Date.now() < deadline) {
-    for (const candidate of electronApp.windows()) {
-      try {
-        await candidate.waitForLoadState('domcontentloaded');
-        if ((await candidate.title()).includes('ElectroNext')) return candidate;
-      } catch {
-        // The splash window closes while we inspect it — ignore and keep looking.
-      }
-    }
-    await new Promise((resolve) => setTimeout(resolve, 100));
-  }
-
-  throw new Error('Timed out waiting for the ElectroNext main window');
-}
 
 test.beforeAll(async () => {
   app = await electron.launch({
@@ -65,21 +42,18 @@ test('main window has correct title', async () => {
 });
 
 test('preload API is exposed on window.electron', async () => {
-  const hasElectron = await page.evaluate(() => {
-    return typeof (window as Record<string, unknown>).electron !== 'undefined';
-  });
+  const hasElectron = await page.evaluate(() => typeof window.electron !== 'undefined');
   expect(hasElectron).toBe(true);
 });
 
 test('preload exposes expected ipc methods', async () => {
   const methods = await page.evaluate(() => {
-    const e = (window as Record<string, unknown>).electron as Record<string, unknown> | undefined;
-    const ipc = e?.ipc as Record<string, unknown> | undefined;
+    const bridge = window.electron;
     return {
-      hasInvoke: typeof ipc?.invoke === 'function',
-      hasOn: typeof ipc?.on === 'function',
-      hasOnce: typeof ipc?.once === 'function',
-      hasPlatform: typeof e?.platform === 'string',
+      hasInvoke: typeof bridge?.ipc.invoke === 'function',
+      hasOn: typeof bridge?.ipc.on === 'function',
+      hasOnce: typeof bridge?.ipc.once === 'function',
+      hasPlatform: typeof bridge?.platform === 'string',
     };
   });
 
@@ -90,21 +64,11 @@ test('preload exposes expected ipc methods', async () => {
 });
 
 test('IPC ping returns pong', async () => {
-  const result = await page.evaluate(async () => {
-    const e = (window as Record<string, unknown>).electron as Record<string, unknown>;
-    const ipc = e.ipc as Record<string, (...args: unknown[]) => Promise<unknown>>;
-    return ipc.invoke('example:ping');
-  });
-  expect(result).toBe('pong');
+  expect(await invoke(page, 'example:ping')).toBe('pong');
 });
 
 test('IPC get-version returns a semver string', async () => {
-  const version = await page.evaluate(async () => {
-    const e = (window as Record<string, unknown>).electron as Record<string, unknown>;
-    const ipc = e.ipc as Record<string, (...args: unknown[]) => Promise<unknown>>;
-    return ipc.invoke('app:get-version');
-  });
-  expect(version).toMatch(/^\d+\.\d+\.\d+/);
+  expect(await invoke(page, 'app:get-version')).toMatch(/^\d+\.\d+\.\d+/);
 });
 
 test('page renders the Redux counter', async () => {

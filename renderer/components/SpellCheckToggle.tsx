@@ -1,48 +1,43 @@
 'use client';
 
-import { useEffect, useState, useSyncExternalStore } from 'react';
-
-const noopSubscribe = () => () => {};
-const getHasElectron = () => typeof window !== 'undefined' && !!window.electron;
-const getServerHasElectron = () => false;
+import { useEffect, useState } from 'react';
+import { useHasElectron } from '../hooks/useHasElectron';
+import Switch from './Switch';
 
 export default function SpellCheckToggle() {
-  const hasElectron = useSyncExternalStore(noopSubscribe, getHasElectron, getServerHasElectron);
+  const hasElectron = useHasElectron();
   const [enabled, setEnabled] = useState(true);
   const [loaded, setLoaded] = useState(false);
+  const [failed, setFailed] = useState(false);
 
   useEffect(() => {
     if (!hasElectron) return;
-    window.electron.ipc.invoke('spellcheck:get-config').then((config) => {
-      setEnabled(config.enabled);
-      setLoaded(true);
-    }).catch(() => {});
+    window.electron.ipc
+      .invoke('spellcheck:get-config')
+      .then((config) => {
+        setEnabled(config.enabled);
+        setLoaded(true);
+      })
+      // Render a disabled control rather than returning null: a settings row
+      // that silently disappears gives the user nothing to act on.
+      .catch((err: unknown) => {
+        console.error('Failed to read spell checker config:', err);
+        setFailed(true);
+      });
   }, [hasElectron]);
 
   const toggle = async () => {
-    if (!window.electron) return;
     const next = !enabled;
-    await window.electron.ipc.invoke('spellcheck:set-enabled', next);
-    setEnabled(next);
+    try {
+      await window.electron.ipc.invoke('spellcheck:set-enabled', next);
+      setEnabled(next);
+    } catch (err) {
+      console.error('Failed to update spell checker:', err);
+      setFailed(true);
+    }
   };
 
-  if (!hasElectron || !loaded) return null;
+  if (!hasElectron || (!loaded && !failed)) return null;
 
-  return (
-    <button
-      onClick={toggle}
-      role="switch"
-      aria-checked={enabled}
-      aria-label="Toggle spell checking"
-      className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
-        enabled ? 'bg-primary' : 'bg-surface-light'
-      }`}
-    >
-      <span
-        className={`inline-block h-3.5 w-3.5 rounded-full bg-white transition-transform ${
-          enabled ? 'translate-x-4' : 'translate-x-0.5'
-        }`}
-      />
-    </button>
-  );
+  return <Switch checked={enabled} onChange={toggle} label="Toggle spell checking" disabled={failed} />;
 }

@@ -1,5 +1,6 @@
-import { powerMonitor, BrowserWindow } from 'electron';
+import { powerMonitor } from 'electron';
 import { IPC_CHANNELS } from '../ipc/channels.js';
+import { broadcast } from '../ipc/typed-ipc.js';
 import type { PowerEvent } from '../ipc/schema.js';
 import log from './logger.js';
 
@@ -20,14 +21,12 @@ export function setupPowerMonitor(): void {
   ];
 
   for (const eventName of events) {
-    // Each event name is a valid Electron powerMonitor event
+    // powerMonitor.on is overloaded per event name rather than taking a union,
+    // so one of them stands in for all — every PowerEvent has an identical
+    // zero-argument listener signature.
     powerMonitor.on(eventName as 'suspend', () => {
       log.info(`Power event: ${eventName}`);
-      for (const win of BrowserWindow.getAllWindows()) {
-        if (!win.isDestroyed()) {
-          win.webContents.send(IPC_CHANNELS.POWER_EVENT, eventName);
-        }
-      }
+      broadcast(IPC_CHANNELS.POWER_EVENT, eventName);
     });
   }
 }

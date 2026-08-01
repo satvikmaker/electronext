@@ -1,9 +1,10 @@
-import { app, BrowserWindow, dialog, globalShortcut, ipcMain } from 'electron';
+import { app, BrowserWindow, dialog, globalShortcut } from 'electron';
 import path from 'node:path';
 import { createWindow } from './helpers/create-window.js';
 import { resolveUrl, isProd, registerAppProtocol } from './helpers/resolve-path.js';
 import { registerIpcHandlers } from './ipc/handlers.js';
 import { IPC_CHANNELS } from './ipc/channels.js';
+import { handle, sendTo } from './ipc/typed-ipc.js';
 import { initializeLogger } from './services/logger.js';
 import log from './services/logger.js';
 import { appUpdater } from './services/auto-updater.js';
@@ -55,7 +56,7 @@ app.on('second-instance', (_event, argv) => {
   // Otherwise check for file path (Windows/Linux file association)
   const filePath = argv.find((arg) => !arg.startsWith('-') && arg !== process.execPath && arg !== '.');
   if (filePath && mainWindow) {
-    mainWindow.webContents.send(IPC_CHANNELS.FILE_OPENED, filePath);
+    sendTo(mainWindow, IPC_CHANNELS.FILE_OPENED, filePath);
   }
 });
 
@@ -63,7 +64,7 @@ app.on('second-instance', (_event, argv) => {
 app.on('open-file', (event, filePath) => {
   event.preventDefault();
   if (mainWindow) {
-    mainWindow.webContents.send(IPC_CHANNELS.FILE_OPENED, filePath);
+    sendTo(mainWindow, IPC_CHANNELS.FILE_OPENED, filePath);
   } else {
     pendingFilePath = filePath;
   }
@@ -96,13 +97,6 @@ async function createMainWindow(): Promise<void> {
   createMenu();
   createTray(mainWindow);
 
-  mainWindow.on('maximize', () => {
-    mainWindow?.webContents.send(IPC_CHANNELS.MAXIMIZED_CHANGED, true);
-  });
-  mainWindow.on('unmaximize', () => {
-    mainWindow?.webContents.send(IPC_CHANNELS.MAXIMIZED_CHANGED, false);
-  });
-
   mainWindow.once('ready-to-show', () => {
     if (splashWindow && !splashWindow.isDestroyed()) {
       splashWindow.close();
@@ -116,7 +110,7 @@ async function createMainWindow(): Promise<void> {
 
     // Send any pending file that was opened before the window was ready
     if (pendingFilePath && mainWindow) {
-      mainWindow.webContents.send(IPC_CHANNELS.FILE_OPENED, pendingFilePath);
+      sendTo(mainWindow, IPC_CHANNELS.FILE_OPENED, pendingFilePath);
       pendingFilePath = null;
     }
   });
@@ -138,8 +132,8 @@ async function createMainWindow(): Promise<void> {
 // ── Updater IPC (prod only) ───────────────────────────────────────────
 function registerUpdaterHandlers(): void {
   if (!isProd) return;
-  ipcMain.handle(IPC_CHANNELS.CHECK_FOR_UPDATES, () => appUpdater.checkForUpdates());
-  ipcMain.handle(IPC_CHANNELS.INSTALL_UPDATE, () => appUpdater.installUpdate());
+  handle(IPC_CHANNELS.CHECK_FOR_UPDATES, () => appUpdater.checkForUpdates());
+  handle(IPC_CHANNELS.INSTALL_UPDATE, () => appUpdater.installUpdate());
 }
 
 // ── App lifecycle ─────────────────────────────────────────────────────

@@ -27,7 +27,7 @@
     "storybook": "storybook dev -p 6006",
     "build:storybook": "storybook build",
     "lint": "eslint .",
-    "typecheck": "tsc -p electron/tsconfig.json --noEmit && tsc -p renderer/tsconfig.json --noEmit",
+    "typecheck": "tsc -p electron/tsconfig.json --noEmit && tsc -p renderer/tsconfig.json --noEmit && tsc -p tsconfig.tools.json --noEmit",
     "prepare": "husky",
     "postinstall": "electron-builder install-app-deps"
   },

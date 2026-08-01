@@ -3,8 +3,12 @@
     "target": "ES2024",
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
-    "lib": ["ES2024"],
-    "types": ["node"],
+    "lib": [
+      "ES2024"
+    ],
+    "types": [
+      "node"
+    ],
     "outDir": "../dist/electron",
     "rootDir": ".",
     "strict": true,
@@ -15,8 +19,14 @@
     "declaration": true,
     "declarationDir": "../dist/electron/types",
     "sourceMap": true,
-    "composite": true
+    "composite": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true
   },
-  "include": ["./**/*.ts"],
-  "exclude": ["node_modules"]
+  "include": [
+    "./**/*.ts"
+  ],
+  "exclude": [
+    "node_modules"
+  ]
 }

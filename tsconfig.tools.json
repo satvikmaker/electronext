@@ -1,0 +1,36 @@
+{
+  "//": "Typechecks the tooling that neither electron/ nor renderer/ covers: Playwright specs, build scripts and the Storybook config. These mix Node, DOM and React contexts, so they need their own lib set.",
+  "compilerOptions": {
+    "target": "ES2024",
+    "lib": [
+      "ES2024",
+      "DOM",
+      "DOM.Iterable"
+    ],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "jsx": "react-jsx",
+    "types": [
+      "node"
+    ],
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noEmit": true,
+    "allowJs": true,
+    "checkJs": false,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "forceConsistentCasingInFileNames": true
+  },
+  "include": [
+    "tests/**/*.ts",
+    "scripts/**/*.mjs",
+    ".storybook/**/*.ts",
+    ".storybook/**/*.d.ts",
+    "playwright.config.ts",
+    "renderer/types/electron.d.ts"
+  ]
+}

@@ -35,6 +35,18 @@ export interface UpdateInfoSummary {
  */
 export const USER_DATA_ARG = '--user-data-path=';
 
+/**
+ * Directories `app.getPath` understands (electron.d.ts:1299).
+ *
+ * Spelled out rather than imported from `electron` so this module keeps zero
+ * imports — that is what lets the renderer import types from it without
+ * dragging electron.d.ts into its program.
+ */
+export type AppPathName =
+  | 'home' | 'appData' | 'assets' | 'userData' | 'sessionData' | 'temp' | 'exe'
+  | 'module' | 'desktop' | 'documents' | 'downloads' | 'music' | 'pictures'
+  | 'videos' | 'recent' | 'logs' | 'crashDumps';
+
 /** Colour scheme preference. Crosses IPC and is persisted to settings.json. */
 export type Theme = 'light' | 'dark' | 'system';
 
@@ -132,7 +144,7 @@ export interface CrashReport extends RendererErrorPayload {
 export interface IpcSchema {
   // App info
   'app:get-version': { args: []; return: string };
-  'app:get-path': { args: [name: string]; return: string };
+  'app:get-path': { args: [name: AppPathName]; return: string };
   'app:report-error': { args: [error: RendererErrorPayload]; return: void };
   'app:get-locale': { args: []; return: string };
   'app:set-progress': { args: [progress: number]; return: void };
@@ -150,6 +162,7 @@ export interface IpcSchema {
   'window:close': { args: []; return: void };
   'window:is-maximized': { args: []; return: boolean };
   'window:open': { args: [name: string, route: string]; return: void };
+  'window:toggle-devtools': { args: []; return: void };
 
   // Auto-update
   'updater:check': { args: []; return: void };

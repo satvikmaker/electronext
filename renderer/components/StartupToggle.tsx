@@ -1,51 +1,44 @@
 'use client';
 
-import { useEffect, useState, useSyncExternalStore } from 'react';
+import { useEffect, useState } from 'react';
+import { useHasElectron } from '../hooks/useHasElectron';
+import Switch from './Switch';
 
-const noopSubscribe = () => () => {};
-const getHasElectron = () => typeof window !== 'undefined' && !!window.electron;
-const getServerHasElectron = () => false;
-
-/**
- * Toggle for "Open at Login" setting.
- * Uses Electron's app.setLoginItemSettings() via IPC.
- */
+/** Toggle for the "Open at Login" setting, backed by app.setLoginItemSettings(). */
 export default function StartupToggle() {
-  const hasElectron = useSyncExternalStore(noopSubscribe, getHasElectron, getServerHasElectron);
+  const hasElectron = useHasElectron();
   const [openAtLogin, setOpenAtLogin] = useState(false);
   const [loaded, setLoaded] = useState(false);
+  const [failed, setFailed] = useState(false);
 
   useEffect(() => {
     if (!hasElectron) return;
-    window.electron.ipc.invoke('app:get-login-settings').then((settings) => {
-      setOpenAtLogin(settings.openAtLogin);
-      setLoaded(true);
-    }).catch(() => {});
+    window.electron.ipc
+      .invoke('app:get-login-settings')
+      .then((settings) => {
+        setOpenAtLogin(settings.openAtLogin);
+        setLoaded(true);
+      })
+      // Render a disabled control rather than returning null: a settings row
+      // that silently disappears gives the user nothing to act on.
+      .catch((err: unknown) => {
+        console.error('Failed to read login item settings:', err);
+        setFailed(true);
+      });
   }, [hasElectron]);
 
   const toggle = async () => {
-    if (!window.electron) return;
     const next = !openAtLogin;
-    await window.electron.ipc.invoke('app:set-login-settings', next);
-    setOpenAtLogin(next);
+    try {
+      await window.electron.ipc.invoke('app:set-login-settings', next);
+      setOpenAtLogin(next);
+    } catch (err) {
+      console.error('Failed to update login item settings:', err);
+      setFailed(true);
+    }
   };
 
-  if (!hasElectron || !loaded) return null;
+  if (!hasElectron || (!loaded && !failed)) return null;
 
-  return (
-    <button
-      onClick={toggle}
-      role="switch"
-      aria-checked={openAtLogin}
-      className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
-        openAtLogin ? 'bg-primary' : 'bg-surface-light'
-      }`}
-    >
-      <span
-        className={`inline-block h-3.5 w-3.5 rounded-full bg-white transition-transform ${
-          openAtLogin ? 'translate-x-4' : 'translate-x-0.5'
-        }`}
-      />
-    </button>
-  );
+  return <Switch checked={openAtLogin} onChange={toggle} label="Open at login" disabled={failed} />;
 }

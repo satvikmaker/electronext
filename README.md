@@ -63,6 +63,7 @@ Electron once the dev server is reachable. It fails fast if port 3000 is occupie
 | `npm run dev` | Next.js dev server + Electron with hot reload |
 | `npm run build` | Build renderer (Turbopack) then main process (tsc) |
 | `npm run lint` | ESLint |
+| `npm run typecheck` | Typecheck all three projects (electron, renderer, tooling) |
 | `npm run test:e2e` | Playwright e2e. The packaged-app suite runs only if `npm run pack` was run first, otherwise it skips |
 | `npm run pack` | Package unpacked into `release/` (no installer) — use for local verification |
 | `npm run dist` | Build + strip source maps + build installers for the current OS |
@@ -141,8 +142,12 @@ export const IPC_CHANNELS = {
   NOTES_CREATE: 'notes:create',
 } as const;
 
-// 3. electron/ipc/handlers.ts — implement it
-ipcMain.handle(IPC_CHANNELS.NOTES_CREATE, (_event, title: string, body: string) => {
+// 3. electron/ipc/handlers.ts — implement it.
+// Use `handle` from ./typed-ipc.js, never ipcMain.handle directly: Electron
+// types the raw API as (channel: string, ...args: any[]) => any, so nothing
+// would check this against the schema. `title` and `body` are inferred, and a
+// wrong return type is a compile error.
+handle(IPC_CHANNELS.NOTES_CREATE, (_event, title, body) => {
   const result = dbRun('INSERT INTO notes (title, content) VALUES (?, ?)', [title, body]);
   return { id: result.lastInsertRowid };
 });
@@ -151,7 +156,9 @@ ipcMain.handle(IPC_CHANNELS.NOTES_CREATE, (_event, title: string, body: string) 
 const { id } = await window.electron.ipc.invoke('notes:create', 'Hello', 'World');
 ```
 
-For **main → renderer** pushes, add the event to `IpcPushEvents` instead and subscribe with
+For **main → renderer** pushes, add the event to `IpcPushEvents` instead, send it with
+`sendTo(window, channel, payload)` or `broadcast(channel, payload)` from `typed-ipc.ts`
+(both skip destroyed windows for you), and subscribe with
 `window.electron.ipc.on('channel', cb)`, which returns an unsubscribe function.
 
 ### Renderer API
@@ -387,7 +394,13 @@ module will not be there.
 is launched by the OS with no `NODE_ENV`. `electron/helpers/resolve-path.ts` normalises this
 once at startup so the preload — which inherits the environment — agrees.
 
-**Add IPC to `schema.ts` first.** Handlers and callers derive their types from it.
+**Add IPC to `schema.ts` first.** Handlers and callers derive their types from it. Register
+handlers with `handle()` and push with `sendTo()`/`broadcast()` from `electron/ipc/typed-ipc.ts`
+— Electron's own `ipcMain.handle` and `webContents.send` are typed `any` on both ends, so
+using them directly silently opts out of the schema.
+
+**Database access goes through `dbQuery`/`dbRun`.** They enforce which statement kinds each
+channel may run. Calling `db.prepare` directly from a new handler bypasses that.
 
 **Never expose `ipcRenderer` directly.** Everything crosses through the preload's
 `contextBridge` surface.

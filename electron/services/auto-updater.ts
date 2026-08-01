@@ -4,6 +4,8 @@ const { autoUpdater } = electronUpdater;
 import { BrowserWindow } from 'electron';
 import log from './logger.js';
 import { IPC_CHANNELS } from '../ipc/channels.js';
+import { sendTo } from '../ipc/typed-ipc.js';
+import type { IpcPushChannel, IpcPushEvents } from '../ipc/schema.js';
 
 export class AppUpdater {
   private mainWindow: BrowserWindow | null = null;
@@ -28,9 +30,7 @@ export class AppUpdater {
         transferred: progress.transferred,
         total: progress.total,
       });
-      if (this.mainWindow && !this.mainWindow.isDestroyed()) {
-        this.mainWindow.setProgressBar(progress.percent / 100);
-      }
+      this.setProgress(progress.percent / 100);
     });
 
     autoUpdater.on('update-downloaded', (info: UpdateInfo) => {
@@ -39,23 +39,22 @@ export class AppUpdater {
         version: info.version,
         releaseDate: info.releaseDate,
       });
-      if (this.mainWindow && !this.mainWindow.isDestroyed()) {
-        this.mainWindow.setProgressBar(-1);
-      }
+      this.setProgress(-1);
     });
 
     autoUpdater.on('error', (error) => {
       log.error('Auto-updater error:', error);
-      if (this.mainWindow && !this.mainWindow.isDestroyed()) {
-        this.mainWindow.setProgressBar(-1);
-      }
+      this.setProgress(-1);
     });
   }
 
-  /** Safe send — guards against destroyed window. */
-  private sendToRenderer(channel: string, data: unknown): void {
+  private sendToRenderer<K extends IpcPushChannel>(channel: K, data: IpcPushEvents[K]): void {
+    sendTo(this.mainWindow, channel, data);
+  }
+
+  private setProgress(value: number): void {
     if (this.mainWindow && !this.mainWindow.isDestroyed()) {
-      this.mainWindow.webContents.send(channel, data);
+      this.mainWindow.setProgressBar(value);
     }
   }
 
