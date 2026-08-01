@@ -80,3 +80,39 @@ test('page renders the IPC demo section', async () => {
   const ipcSection = page.locator('text=IPC Communication');
   await expect(ipcSection).toBeVisible();
 });
+
+/**
+ * The renderer supplies raw SQL, so these channels are a privilege boundary.
+ * Each case below defeated an earlier version of the guard: leading comments
+ * slipped past a `^\s*` regex, `WITH … DELETE … RETURNING` reads as a row-
+ * returning statement, and SQLite reports `ATTACH` as read-only.
+ */
+test.describe('SQL channel guard', () => {
+  const rejected = [
+    ['comment-prefixed DDL', '/**/DROP TABLE notes'],
+    ['line-comment-prefixed DDL', '--x\nDROP TABLE notes'],
+    ['plain DDL', 'DROP TABLE notes'],
+    ['CTE that writes and returns rows', 'WITH x AS (SELECT 1) DELETE FROM notes RETURNING *'],
+    ['ATTACH, which SQLite calls read-only', "ATTACH DATABASE '/tmp/evil.db' AS e"],
+    ['PRAGMA', 'PRAGMA journal_mode'],
+  ] as const;
+
+  for (const [label, sql] of rejected) {
+    test(`db:query rejects ${label}`, async () => {
+      await expect(invoke(page, 'db:query', sql, [])).rejects.toThrow();
+    });
+  }
+
+  test('db:query still allows reads', async () => {
+    expect(await invoke(page, 'db:query', 'SELECT 1 as ok', [])).toEqual({ rows: [{ ok: 1 }] });
+    expect(await invoke(page, 'db:query', 'WITH x AS (SELECT 7 as n) SELECT n FROM x', []))
+      .toEqual({ rows: [{ n: 7 }] });
+  });
+
+  test('db:run allows DML but rejects DDL', async () => {
+    const inserted = await invoke(page, 'db:run', 'INSERT INTO notes (title, content) VALUES (?, ?)', ['t', 'c']);
+    expect(inserted.changes).toBe(1);
+    await expect(invoke(page, 'db:run', 'DROP TABLE notes', [])).rejects.toThrow();
+    await invoke(page, 'db:run', 'DELETE FROM notes WHERE title = ?', ['t']);
+  });
+});

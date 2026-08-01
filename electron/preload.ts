@@ -16,17 +16,16 @@ function readInitialTheme(): Theme {
   const userDataPath = process.argv.find((arg) => arg.startsWith(USER_DATA_ARG))?.slice(USER_DATA_ARG.length);
   if (!userDataPath) return 'system';
 
-  let contents: string;
+  // settings.json is user-editable, so both its presence and its contents are
+  // untrusted. A throw here would take down the whole context bridge, so a
+  // missing or corrupt file falls back to the system theme.
   try {
-    contents = readFileSync(join(userDataPath, 'settings.json'), 'utf-8');
+    const parsed: unknown = JSON.parse(readFileSync(join(userDataPath, 'settings.json'), 'utf-8'));
+    const stored = (parsed as { theme?: unknown } | null)?.theme;
+    return isTheme(stored) ? stored : 'system';
   } catch {
-    return 'system'; // No settings file yet — first launch.
+    return 'system';
   }
-
-  // settings.json is user-editable, so the stored value is untrusted.
-  const parsed: unknown = JSON.parse(contents);
-  const stored = (parsed as { theme?: unknown } | null)?.theme;
-  return isTheme(stored) ? stored : 'system';
 }
 
 const electronHandler = {

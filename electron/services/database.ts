@@ -108,9 +108,9 @@ function leadingKeyword(sql: string): string {
 /**
  * Allow only the statement kinds a channel is meant to run.
  *
- * This is an allowlist rather than a denylist of dangerous keywords — a denylist
- * is only ever as good as its authors' imagination. better-sqlite3's `prepare`
- * additionally rejects strings containing more than one statement.
+ * An allowlist, not a denylist of dangerous keywords — a denylist is only ever
+ * as good as its authors' imagination. better-sqlite3's `prepare` additionally
+ * rejects strings containing more than one statement.
  */
 function assertStatementKind(sql: string, allowed: readonly string[]): void {
   const keyword = leadingKeyword(sql);
@@ -119,8 +119,11 @@ function assertStatementKind(sql: string, allowed: readonly string[]): void {
   }
 }
 
+// `WITH` appears in both lists because a CTE can prefix SELECT, INSERT, UPDATE
+// or DELETE. It cannot prefix DDL — `WITH ... DROP` is a SQLite syntax error —
+// so allowing it does not widen either channel beyond its statement class.
 const READ_STATEMENTS = ['SELECT', 'WITH'] as const;
-const WRITE_STATEMENTS = ['INSERT', 'UPDATE', 'DELETE'] as const;
+const WRITE_STATEMENTS = ['INSERT', 'UPDATE', 'DELETE', 'WITH'] as const;
 
 /**
  * Execute a read query. Returns rows as an array of objects.
@@ -131,8 +134,17 @@ export function dbQuery<Row extends SqlRow = SqlRow>(
   sql: string,
   params: SqlValue[] = [],
 ): { rows: Row[] } {
+  // Two independent checks, because neither is sufficient alone:
+  //   - The keyword check alone lets `WITH x AS (...) DELETE ... RETURNING *`
+  //     through: it leads with WITH and returns rows, so `.all()` runs it.
+  //   - `readonly` alone lets `ATTACH DATABASE` through — SQLite reports it as
+  //     read-only, but it would expose an arbitrary file to later queries.
   assertStatementKind(sql, READ_STATEMENTS);
-  return { rows: requireDb().prepare<SqlValue[], Row>(sql).all(...params) };
+  const statement = requireDb().prepare<SqlValue[], Row>(sql);
+  if (!statement.readonly) {
+    throw new Error('Statement modifies the database and cannot run on the read channel');
+  }
+  return { rows: statement.all(...params) };
 }
 
 /** Execute a write statement. Returns change count and last insert rowid. */

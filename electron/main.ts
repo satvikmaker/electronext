@@ -1,6 +1,6 @@
 import { app, BrowserWindow, dialog, globalShortcut } from 'electron';
 import path from 'node:path';
-import { createWindow } from './helpers/create-window.js';
+import { createWindow, getWindow } from './helpers/create-window.js';
 import { resolveUrl, isProd, registerAppProtocol } from './helpers/resolve-path.js';
 import { registerIpcHandlers } from './ipc/handlers.js';
 import { IPC_CHANNELS } from './ipc/channels.js';
@@ -84,6 +84,16 @@ function createSplash(): BrowserWindow {
 
 // ── Main window ───────────────────────────────────────────────────────
 async function createMainWindow(): Promise<void> {
+  // createWindow returns the existing window for a name already in use. Bail
+  // out before creating a splash, otherwise it would wait on a `ready-to-show`
+  // that already fired and hang around forever.
+  const existing = getWindow('main');
+  if (existing) {
+    if (existing.isMinimized()) existing.restore();
+    existing.focus();
+    return;
+  }
+
   splashWindow = createSplash();
 
   mainWindow = createWindow('main', {
@@ -156,10 +166,11 @@ app.whenReady().then(async () => {
   registerUpdaterHandlers();
   await createMainWindow();
 
-  app.on('activate', async () => {
-    if (BrowserWindow.getAllWindows().length === 0) {
-      await createMainWindow();
-    }
+  // Keyed on the main window rather than a zero-window count: with a secondary
+  // window (say Settings) still open, clicking the dock icon previously did
+  // nothing at all, leaving no way back to the app's main view.
+  app.on('activate', () => {
+    void createMainWindow().catch((err: unknown) => log.error('Failed to reopen main window:', err));
   });
 }).catch((err: unknown) => {
   // Without this, a failure in database/protocol/spell-checker setup surfaces as

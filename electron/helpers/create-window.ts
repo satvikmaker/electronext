@@ -54,7 +54,8 @@ export function createWindow(
   const existing = getWindow(windowName);
   if (existing) return existing;
 
-  const store = new Store<WindowState>({ name: `window-state-${windowName}` });
+  // clearInvalidConfig: a corrupt bounds file must not stop a window opening.
+  const store = new Store<WindowState>({ name: `window-state-${windowName}`, clearInvalidConfig: true });
   const storeData = store.store;
 
   const savedState: WindowState = {

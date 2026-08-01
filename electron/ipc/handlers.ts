@@ -104,7 +104,10 @@ export function registerIpcHandlers(): void {
     if (existing) { existing.focus(); return; }
     const win = createWindow(name, { width: 700, height: 500, minWidth: 400, minHeight: 300 });
     win.once('ready-to-show', () => win.show());
-    void win.loadURL(resolveUrl(route));
+    win.loadURL(resolveUrl(route)).catch((err: unknown) => {
+      log.error(`Failed to load "${route}" in window "${name}":`, err);
+      if (!win.isDestroyed()) win.close();
+    });
   });
 
   // ── File metadata ──────────────────────────────────────────────

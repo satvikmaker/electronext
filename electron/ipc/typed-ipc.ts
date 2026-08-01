@@ -33,9 +33,15 @@ export function sendTo<K extends IpcPushChannel>(
   data: IpcPushEvents[K],
 ): void {
   if (!target) return;
-  const contents = target instanceof BrowserWindow ? target.webContents : target;
-  if (contents.isDestroyed()) return;
-  contents.send(channel, data);
+  // Check the window before reaching for `webContents`: property access on a
+  // destroyed BrowserWindow throws "Object has been destroyed".
+  if (target instanceof BrowserWindow) {
+    if (target.isDestroyed()) return;
+    target.webContents.send(channel, data);
+    return;
+  }
+  if (target.isDestroyed()) return;
+  target.send(channel, data);
 }
 
 /** Push an event to every open window. */

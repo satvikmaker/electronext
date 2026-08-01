@@ -12,15 +12,29 @@
  */
 
 import { parentPort, workerData } from 'node:worker_threads';
+import type { WorkerMessage } from '../services/worker-manager.js';
 
-interface Input {
-  iterations?: number;
+// `workerData` is typed `any` by @types/node and its `data` field originates in
+// the renderer, so nothing about it is guaranteed.
+if (!parentPort) throw new Error('example.worker must be run as a worker thread');
+// Capture after the guard so the narrowed type survives into the closures below.
+const port = parentPort;
+
+const MAX_ITERATIONS = 1_000;
+
+function readIterations(raw: unknown): number {
+  const value = (raw as { data?: { iterations?: unknown } } | null)?.data?.iterations;
+  if (typeof value !== 'number' || !Number.isInteger(value) || value < 1) return 10;
+  return Math.min(value, MAX_ITERATIONS);
 }
 
-const { data } = workerData as { data: Input };
-const iterations = data.iterations ?? 10;
+const iterations = readIterations(workerData);
 
-async function run() {
+function post(message: WorkerMessage): void {
+  port.postMessage(message);
+}
+
+async function run(): Promise<void> {
   let result = 0;
 
   for (let i = 1; i <= iterations; i++) {
@@ -28,17 +42,18 @@ async function run() {
     await new Promise((r) => setTimeout(r, 200));
     result += i;
 
-    parentPort!.postMessage({
+    post({
       type: 'progress',
       percent: Math.round((i / iterations) * 100),
       message: `Processing step ${i}/${iterations}`,
     });
   }
 
-  parentPort!.postMessage({
-    type: 'complete',
-    data: { result, iterations },
-  });
+  post({ type: 'complete', data: { result, iterations } });
 }
 
-run();
+// Surface a rejection as a worker 'error' event rather than an unhandled
+// rejection that would terminate the thread with no diagnostic.
+run().catch((err: unknown) => {
+  throw err instanceof Error ? err : new Error(String(err));
+});

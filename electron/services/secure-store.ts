@@ -14,7 +14,10 @@ interface SecureStoreData {
   [key: string]: string;
 }
 
-const store = new Store<SecureStoreData>({ name: 'secure-credentials' });
+// See services/store.ts for why clearInvalidConfig matters. Credentials in a
+// corrupt file are unrecoverable regardless, so resetting loses nothing that
+// was still readable.
+const store = new Store<SecureStoreData>({ name: 'secure-credentials', clearInvalidConfig: true });
 
 function assertEncryptionAvailable(): void {
   if (!safeStorage.isEncryptionAvailable()) {
