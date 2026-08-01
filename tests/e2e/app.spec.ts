@@ -27,13 +27,20 @@ test.afterAll(async () => {
 
 test('main window is visible and not crashed', async () => {
   const window = await app.browserWindow(page);
-  const state = await window.evaluate((win: Electron.BrowserWindow) => ({
-    isVisible: win.isVisible(),
-    isCrashed: win.webContents.isCrashed(),
-  }));
 
-  expect(state.isCrashed).toBe(false);
-  expect(state.isVisible).toBe(true);
+  // The window is constructed with `show: false` and revealed in `ready-to-show`,
+  // which can land after the page reports domcontentloaded. Poll rather than
+  // sample once — a single read races the reveal, and loses that race on Linux.
+  await expect
+    .poll(
+      () =>
+        window.evaluate((win: Electron.BrowserWindow) => ({
+          isVisible: win.isVisible(),
+          isCrashed: win.webContents.isCrashed(),
+        })),
+      { timeout: 15_000 },
+    )
+    .toEqual({ isVisible: true, isCrashed: false });
 });
 
 test('main window has correct title', async () => {

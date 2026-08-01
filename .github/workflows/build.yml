@@ -9,6 +9,9 @@ on:
 jobs:
   build:
     strategy:
+      # Report every platform. With fail-fast the first failure cancels the
+      # others, hiding whether a problem is platform-specific.
+      fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
